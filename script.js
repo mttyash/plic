@@ -36,7 +36,7 @@ const categories = [{
     }
 ];
 
-// In‑memory demo storage:
+// In-memory demo storage:
 const chatMessages = {}; // Each message will be an object: { date, text, files }
 const flashcards = {}; // Stored as objects: { question, answers: [ { text, correct } ] }
 const reminders = {}; // For reminders; each channel id key maps to an array of reminders
@@ -73,7 +73,7 @@ function renderSidebar() {
         });
         sidebar.appendChild(ul);
     });
-	if (!window.sidebarOutsideListenerAdded) {
+    if (!window.sidebarOutsideListenerAdded) {
         const collapseSidebar = (event) => {
             // If the click/touch is not inside the sidebar element, collapse it.
             if (sidebar && !sidebar.contains(event.target)) {
@@ -93,7 +93,7 @@ function selectChannel(channel) {
             item.classList.add("active-channel");
         }
     });
-	document.querySelector(".sidebar").classList.add("collapsed");
+    document.querySelector(".sidebar").classList.add("collapsed");
     renderChannel(channel);
 }
 
@@ -118,9 +118,14 @@ function renderChannel(channel) {
  ***********************/
 function renderTextChannel(container, channel) {
     container.innerHTML = "";
+	
+	const header = document.createElement("h2");
+    header.textContent = "Text Channel";
+    container.appendChild(header);
+	
     const chatContainer = document.createElement("div");
     chatContainer.classList.add("chat-container");
-    chatContainer.style.height = "100%";
+    chatContainer.style.height = "90%";
 
     const messagesDiv = document.createElement("div");
     messagesDiv.classList.add("messages-area");
@@ -154,7 +159,8 @@ function renderTextChannel(container, channel) {
             const parts = text.split(urlRegex);
 
             parts.forEach((part, i) => {
-                if (!part) return;
+                if (!part)
+                    return;
                 if (i % 2 === 1) {
                     let url = part;
                     if (/^www\./i.test(url)) {
@@ -749,330 +755,279 @@ function renderFlashcardChannel(container, channel) {
  * 3. Whiteboard (Full-screen canvas with relative brush size and brush indicator)
  ***********************/
 function renderWhiteboardChannel(container, channel) {
-    const header = document.createElement("h2");
+    // Get our canvas element
+	const header = document.createElement("h2");
     header.textContent = "Whiteboard";
     container.appendChild(header);
-
-    // Create toolbar
-    const toolbar = document.createElement("div");
-    toolbar.style.display = "flex";
-    toolbar.style.alignItems = "center";
-    toolbar.style.gap = "10px";
-    toolbar.style.padding = "5px";
-    toolbar.style.backgroundColor = "#f0f0f0";
-    container.appendChild(toolbar);
-
-    // Color picker
-    const colorLabel = document.createElement("label");
-    colorLabel.textContent = "Color:";
-    const colorPicker = document.createElement("input");
-    colorPicker.type = "color";
-    colorPicker.value = "#000000";
-    colorPicker.style.cursor = "pointer";
-    toolbar.appendChild(colorLabel);
-    toolbar.appendChild(colorPicker);
-
-    // Size control
-    const sizeLabel = document.createElement("label");
-    sizeLabel.textContent = "Size:";
-    toolbar.appendChild(sizeLabel);
-    const sizeSlider = document.createElement("input");
-    sizeSlider.type = "range";
-    sizeSlider.min = "1";
-    sizeSlider.max = "50";
-    sizeSlider.value = "2";
-    sizeSlider.style.width = "100px";
-    toolbar.appendChild(sizeSlider);
-    const sizeValue = document.createElement("span");
-    sizeValue.textContent = sizeSlider.value;
-    toolbar.appendChild(sizeValue);
-
-    // Eraser button
-    const eraserButton = document.createElement("button");
-    eraserButton.textContent = "Eraser";
-    eraserButton.style.marginLeft = "10px";
-    toolbar.appendChild(eraserButton);
-
-    // Clear button
-    const clearButton = document.createElement("button");
-    clearButton.textContent = "Clear Canvas";
-    clearButton.style.marginLeft = "auto";
-    clearButton.style.padding = "5px 10px";
-    clearButton.style.cursor = "pointer";
-    toolbar.appendChild(clearButton);
-
-    // Whiteboard container
-    const whiteboardWrapper = document.createElement("div");
-    whiteboardWrapper.classList.add("whiteboard-wrapper");
-    whiteboardWrapper.style.height = "calc(100% - 70px)";
-    whiteboardWrapper.style.position = "relative";
-    container.appendChild(whiteboardWrapper);
-
-    // Canvas setup
+	
     const canvas = document.createElement("canvas");
-    canvas.style.position = "absolute";
-    canvas.style.top = "0";
-    canvas.style.left = "0";
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
-    whiteboardWrapper.appendChild(canvas);
+    container.appendChild(canvas);
+    const context = canvas.getContext("2d");
 
-    // Cursor element
-    const cursor = document.createElement("div");
-    cursor.style.position = "absolute";
-    cursor.style.pointerEvents = "none";
-    cursor.style.border = "2px solid #000";
-    cursor.style.borderRadius = "50%";
-    cursor.style.transform = "translate(-50%, -50%)";
-    cursor.style.display = "none";
-    cursor.style.zIndex = "9999";
-    whiteboardWrapper.appendChild(cursor);
+    // Disable right-clicking
+    document.oncontextmenu = function () {
+        return false;
+    }
 
-    const ctx = canvas.getContext("2d");
+    // List of all strokes drawn
+    const drawings = [];
+	// Load previously saved drawings for the current channel, if they exist
+	if (window.whiteboardData[channel]) {
+		drawings.push(...window.whiteboardData[channel]);
+	}
 
-    // State variables
-    let drawings = window.whiteboardData[channel.id] || [];
-    let currentColor = "#000000";
-    let currentSize = 2;
-    let isEraserActive = false;
-    let cursorX, cursorY, prevCursorX, prevCursorY;
-    let offsetX = 0, offsetY = 0;
+    // Coordinates of our cursor
+    let cursorX;
+    let cursorY;
+    let prevCursorX;
+    let prevCursorY;
+
+    // Distance from origin
+    let offsetX = 0;
+    let offsetY = 0;
+
+    // Zoom amount
     let scale = 1;
-    let leftMouseDown = false, rightMouseDown = false;
 
-    // Update cursor visual properties
-    function updateCursor() {
-        if (isEraserActive) {
-            cursor.style.borderColor = "#ff0000";
-            const size = currentSize * 2;
-            cursor.style.width = `${size}px`;
-            cursor.style.height = `${size}px`;
-        } else {
-            cursor.style.borderColor = currentColor;
-            cursor.style.width = `${currentSize}px`;
-            cursor.style.height = `${currentSize}px`;
-        }
-    }
-
-    function resizeCanvas() {
-        canvas.width = whiteboardWrapper.clientWidth;
-        canvas.height = whiteboardWrapper.clientHeight;
-        redrawCanvas();
-    }
-
+    // Convert coordinates
     function toScreenX(xTrue) {
         return (xTrue + offsetX) * scale;
     }
-
     function toScreenY(yTrue) {
         return (yTrue + offsetY) * scale;
     }
-
     function toTrueX(xScreen) {
         return (xScreen / scale) - offsetX;
     }
-
     function toTrueY(yScreen) {
         return (yScreen / scale) - offsetY;
     }
-
+    function trueHeight() {
+        return canvas.clientHeight / scale;
+    }
     function trueWidth() {
         return canvas.clientWidth / scale;
     }
 
-    function trueHeight() {
-        return canvas.clientHeight / scale;
-    }
-
     function redrawCanvas() {
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        for (const line of drawings) {
-            drawLine(
-                toScreenX(line.x0),
-                toScreenY(line.y0),
-                toScreenX(line.x1),
-                toScreenY(line.y1),
-                line.color,
-                line.size
-            );
+        // Set the canvas to the size of the window
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < drawings.length; i++) {
+            const line = drawings[i];
+            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1));
         }
     }
+    redrawCanvas();
 
-    function drawLine(x0, y0, x1, y1, color, size) {
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = size;
-        ctx.lineCap = "round";
-        ctx.stroke();
-    }
+    // If the window changes size, redraw the canvas
+    window.addEventListener("resize", (event) => {
+        redrawCanvas();
+    });
 
-    function distancePointToSegment(p, a, b) {
-        const abx = b.x - a.x;
-        const aby = b.y - a.y;
-        const apx = p.x - a.x;
-        const apy = p.y - a.y;
-        const dot = apx * abx + apy * aby;
-        const lenSq = abx * abx + aby * aby;
-        let t = lenSq !== 0 ? Math.min(1, Math.max(0, dot / lenSq)) : 0;
-        const closestX = a.x + t * abx;
-        const closestY = a.y + t * aby;
-        const dx = p.x - closestX;
-        const dy = p.y - closestY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
+    // Mouse Event Handlers
+    canvas.addEventListener('mousedown', onMouseDown);
+    canvas.addEventListener('mouseup', onMouseUp, false);
+    canvas.addEventListener('mouseout', onMouseUp, false);
+    canvas.addEventListener('mousemove', onMouseMove, false);
+    canvas.addEventListener('wheel', onMouseWheel, false);
 
+    // Touch Event Handlers
+    canvas.addEventListener('touchstart', onTouchStart);
+    canvas.addEventListener('touchend', onTouchEnd);
+    canvas.addEventListener('touchcancel', onTouchEnd);
+    canvas.addEventListener('touchmove', onTouchMove);
+
+    // Mouse functions
+    let leftMouseDown = false;
+    let rightMouseDown = false;
     function onMouseDown(event) {
-        const rect = canvas.getBoundingClientRect();
-        cursorX = event.clientX - rect.left;
-        cursorY = event.clientY - rect.top;
-        if (event.button === 0) {
+        // Detect left clicks
+        if (event.button == 0) {
             leftMouseDown = true;
             rightMouseDown = false;
         }
-        if (event.button === 2) {
+        // Detect right clicks
+        if (event.button == 2) {
             rightMouseDown = true;
             leftMouseDown = false;
         }
-        prevCursorX = cursorX;
-        prevCursorY = cursorY;
+
+        // Update the cursor coordinates
+        cursorX = event.offsetX;
+        cursorY = event.offsetY;
+        prevCursorX = event.offsetX;
+        prevCursorY = event.offsetY;
     }
-
     function onMouseMove(event) {
-        const rect = canvas.getBoundingClientRect();
-        cursorX = event.clientX - rect.left;
-        cursorY = event.clientY - rect.top;
-
-        cursor.style.display = "block";
-        cursor.style.left = `${cursorX}px`;
-        cursor.style.top = `${cursorY}px`;
-
+        // Get mouse position
+        cursorX = event.offsetX;
+        cursorY = event.offsetY;
         const scaledX = toTrueX(cursorX);
         const scaledY = toTrueY(cursorY);
         const prevScaledX = toTrueX(prevCursorX);
         const prevScaledY = toTrueY(prevCursorY);
 
         if (leftMouseDown) {
-            if (isEraserActive) {
-                const eraserSize = currentSize / scale;
-                const p = { x: scaledX, y: scaledY };
-
-                // Remove intersecting lines
-                for (let i = drawings.length - 1; i >= 0; i--) {
-                    const segment = drawings[i];
-                    const a = { x: segment.x0, y: segment.y0 };
-                    const b = { x: segment.x1, y: segment.y1 };
-                    const distance = distancePointToSegment(p, a, b);
-
-                    if (distance < eraserSize) {
-                        drawings.splice(i, 1);
-                    }
-                }
-
-                redrawCanvas();
-            } else {
-                drawings.push({
-                    x0: prevScaledX,
-                    y0: prevScaledY,
-                    x1: scaledX,
-                    y1: scaledY,
-                    color: currentColor,
-                    size: currentSize,
-                });
-
-                drawLine(
-                    prevCursorX,
-                    prevCursorY,
-                    cursorX,
-                    cursorY,
-                    currentColor,
-                    currentSize
-                );
-            }
+            // Add the line to our drawing history
+            drawings.push({
+                x0: prevScaledX,
+                y0: prevScaledY,
+                x1: scaledX,
+                y1: scaledY
+            })
+			// Save drawings to whiteboardData when a line is drawn
+			if (!window.whiteboardData[channel]) {
+				window.whiteboardData[channel] = [];
+			}
+			window.whiteboardData[channel] = [...window.whiteboardData[channel], { x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY }];
+            // Draw a line
+            drawLine(prevCursorX, prevCursorY, cursorX, cursorY);
         }
-
         if (rightMouseDown) {
-            cursor.style.display = "none";
+            // Move the screen
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
         }
-
         prevCursorX = cursorX;
         prevCursorY = cursorY;
     }
-
     function onMouseUp() {
         leftMouseDown = false;
         rightMouseDown = false;
     }
-
     function onMouseWheel(event) {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
         scale = scale * (1 + scaleAmount);
 
-        const rect = canvas.getBoundingClientRect();
-        const distX = (event.clientX - rect.left) / canvas.clientWidth;
-        const distY = (event.clientY - rect.top) / canvas.clientHeight;
+        // Zoom the page based on where the cursor is
+        var distX = event.offsetX / canvas.width;
+        var distY = event.offsetY / canvas.height;
 
+        // Calculate how much we need to zoom
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
 
-        offsetX -= unitsZoomedX * distX;
-        offsetY -= unitsZoomedY * distY;
+        const unitsAddLeft = unitsZoomedX * distX;
+        const unitsAddTop = unitsZoomedY * distY;
+
+        offsetX -= unitsAddLeft;
+        offsetY -= unitsAddTop;
 
         redrawCanvas();
     }
-
-    function saveDrawings() {
-        window.whiteboardData[channel.id] = drawings;
+    function drawLine(x0, y0, x1, y1) {
+        context.beginPath();
+        context.moveTo(x0, y0);
+        context.lineTo(x1, y1);
+        context.strokeStyle = '#000';
+        context.lineWidth = 2;
+        context.stroke();
     }
 
-    // Event listeners
-    canvas.addEventListener("mousedown", onMouseDown);
-    canvas.addEventListener("mouseup", onMouseUp);
-    canvas.addEventListener("mouseout", onMouseUp);
-    canvas.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("wheel", onMouseWheel);
-    canvas.addEventListener("mouseleave", () => {
-        cursor.style.display = "none";
-    });
-    document.oncontextmenu = () => false;
+    // Touch functions
+    const prevTouches = [null, null]; // up to 2 touches
+    let singleTouch = false;
+    let doubleTouch = false;
+    function onTouchStart(event) {
+        if (event.touches.length == 1) {
+            singleTouch = true;
+            doubleTouch = false;
+        }
+        if (event.touches.length >= 2) {
+            singleTouch = false;
+            doubleTouch = true;
+        }
 
-    // Tool controls
-    colorPicker.addEventListener("input", (e) => {
-        currentColor = e.target.value;
-        updateCursor();
-    });
+        // Store the last touches
+        prevTouches[0] = event.touches[0];
+        prevTouches[1] = event.touches[1];
+    }
+    function onTouchMove(event) {
+        // Get first touch coordinates
+        const touch0X = event.touches[0].clientX - canvas.getBoundingClientRect().left;
+        const touch0Y = event.touches[0].clientY - canvas.getBoundingClientRect().top;
+        const prevTouch0X = prevTouches[0].clientX - canvas.getBoundingClientRect().left;
+        const prevTouch0Y = prevTouches[0].clientY - canvas.getBoundingClientRect().top;
 
-    sizeSlider.addEventListener("input", (e) => {
-        currentSize = parseInt(e.target.value);
-        sizeValue.textContent = currentSize;
-        updateCursor();
-    });
+        const scaledX = toTrueX(touch0X);
+        const scaledY = toTrueY(touch0Y);
+        const prevScaledX = toTrueX(prevTouch0X);
+        const prevScaledY = toTrueY(prevTouch0Y);
 
-    eraserButton.addEventListener("click", () => {
-        isEraserActive = !isEraserActive;
-        eraserButton.style.backgroundColor = isEraserActive ? "#cccccc" : "";
-        updateCursor();
-    });
+        if (singleTouch) {
+            // Add to history
+            drawings.push({
+                x0: prevScaledX,
+                y0: prevScaledY,
+                x1: scaledX,
+                y1: scaledY
+            })
+			// Save drawings to whiteboardData when a line is drawn
+			if (!window.whiteboardData[channel]) {
+				window.whiteboardData[channel] = [];
+			}
+			window.whiteboardData[channel] = [...window.whiteboardData[channel], { x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY }];
+            drawLine(prevTouch0X, prevTouch0Y, touch0X, touch0Y);
+        }
 
-    clearButton.addEventListener("click", () => {
-        drawings = [];
-        redrawCanvas();
-        saveDrawings();
-    });
+        if (doubleTouch) {
+            // Get second touch coordinates
+            const touch1X = event.touches[1].clientX - canvas.getBoundingClientRect().left;
+            const touch1Y = event.touches[1].clientY - canvas.getBoundingClientRect().top;
+            const prevTouch1X = prevTouches[1].clientX - canvas.getBoundingClientRect().left;
+            const prevTouch1Y = prevTouches[1].clientY - canvas.getBoundingClientRect().top;
 
-    // Initial setup
-    updateCursor();
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
+            // Get midpoints
+            const midX = (touch0X + touch1X) / 2;
+            const midY = (touch0Y + touch1Y) / 2;
+            const prevMidX = (prevTouch0X + prevTouch1X) / 2;
+            const prevMidY = (prevTouch0Y + prevTouch1Y) / 2;
 
-    // Save drawings before leaving the channel
-    container.addEventListener("unload", saveDrawings);
+            // Calculate the distances between the touches
+            const hypot = Math.sqrt(Math.pow((touch0X - touch1X), 2) + Math.pow((touch0Y - touch1Y), 2));
+            const prevHypot = Math.sqrt(Math.pow((prevTouch0X - prevTouch1X), 2) + Math.pow((prevTouch0Y - prevTouch1Y), 2));
+
+            // Calculate the screen scale change
+            var zoomAmount = hypot / prevHypot;
+            scale = scale * zoomAmount;
+            const scaleAmount = 1 - zoomAmount;
+
+            // Calculate how many pixels the midpoints have moved in the x and y direction
+            const panX = midX - prevMidX;
+            const panY = midY - prevMidY;
+            // Scale this movement based on the zoom level
+            offsetX += (panX / scale);
+            offsetY += (panY / scale);
+
+            // Get the relative position of the middle of the zoom.
+            var zoomRatioX = midX / canvas.clientWidth;
+            var zoomRatioY = midY / canvas.clientHeight;
+
+            // Calculate the amounts zoomed from each edge of the screen
+            const unitsZoomedX = trueWidth() * scaleAmount;
+            const unitsZoomedY = trueHeight() * scaleAmount;
+
+            const unitsAddLeft = unitsZoomedX * zoomRatioX;
+            const unitsAddTop = unitsZoomedY * zoomRatioY;
+
+            offsetX += unitsAddLeft;
+            offsetY += unitsAddTop;
+
+            redrawCanvas();
+        }
+        prevTouches[0] = event.touches[0];
+        prevTouches[1] = event.touches[1];
+    }
+    function onTouchEnd(event) {
+        singleTouch = false;
+        doubleTouch = false;
+    }
 }
 
 /***********************
@@ -1160,7 +1115,11 @@ function renderReminderChannel(container, channel) {
                     b: parseInt(parts[2]) || 0
                 };
             }
-            return { r: 255, g: 255, b: 255 };
+            return {
+                r: 255,
+                g: 255,
+                b: 255
+            };
         };
 
         const calculateLuminance = (r, g, b) => {
@@ -1171,7 +1130,11 @@ function renderReminderChannel(container, channel) {
             return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
         };
 
-        const { r, g, b } = parseColor(bgColor);
+        const {
+            r,
+            g,
+            b
+        } = parseColor(bgColor);
         return calculateLuminance(r, g, b) > 0.179 ? '#000000' : '#ffffff';
     }
 
@@ -1189,21 +1152,21 @@ function renderReminderChannel(container, channel) {
         reminders[channel.id].forEach((reminder, index) => {
             const reminderDiv = document.createElement("div");
             reminderDiv.classList.add("reminder-container");
-            
+
             // Set background and calculated text color
             reminderDiv.style.backgroundColor = reminder.color;
             const textColor = getContrastingTextColor(reminder.color);
             reminderDiv.style.color = textColor;
-            
+
             reminderDiv.style.padding = "10px";
             reminderDiv.style.margin = "5px 0";
             reminderDiv.style.borderRadius = "4px";
-            
-			if (reminder.date) {
-				const dateDiv = document.createElement("div");
-				dateDiv.textContent = new Date(reminder.date).toLocaleString();
-				reminderDiv.appendChild(dateDiv);
-			}
+
+            if (reminder.date) {
+                const dateDiv = document.createElement("div");
+                dateDiv.textContent = new Date(reminder.date).toLocaleString();
+                reminderDiv.appendChild(dateDiv);
+            }
 
             const textDiv = document.createElement("div");
             textDiv.textContent = reminder.text;
@@ -1223,7 +1186,7 @@ function renderReminderChannel(container, channel) {
 
     // Add reminder form
     const form = document.createElement("form");
-    
+
     // Date input
     const dateInput = document.createElement("input");
     dateInput.type = "datetime-local";
