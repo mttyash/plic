@@ -5,7 +5,7 @@ const categories = [{
         name: "General",
         channels: [{
                 id: "text1",
-                name: "Chat",
+                name: "General Chat",
                 type: "text"
             }
         ]
@@ -21,7 +21,7 @@ const categories = [{
                 type: "whiteboard"
             }, {
                 id: "code1",
-                name: "IDE",
+                name: "Code Runner",
                 type: "code"
             }
         ]
@@ -29,7 +29,7 @@ const categories = [{
         name: "Reminders",
         channels: [{
                 id: "reminder1",
-                name: "Reminders",
+                name: "My Reminders",
                 type: "reminder"
             }
         ]
@@ -51,13 +51,11 @@ if (!window.codeData)
 function renderSidebar() {
     const sidebar = document.querySelector(".sidebar");
     sidebar.innerHTML = "";
-    
     const collapseBtn = document.createElement("button");
-    collapseBtn.textContent = "◀";
+    collapseBtn.textContent = "▶";
     collapseBtn.classList.add("collapse-btn");
     collapseBtn.addEventListener("click", () => sidebar.classList.toggle("collapsed"));
     sidebar.appendChild(collapseBtn);
-    
     categories.forEach(category => {
         const catTitle = document.createElement("h2");
         catTitle.textContent = category.name;
@@ -75,10 +73,7 @@ function renderSidebar() {
         });
         sidebar.appendChild(ul);
     });
-    
-    // Add an event listener to collapse the sidebar if a click or touch occurs outside of it.
-    // (We add these listeners only once to avoid duplicate listeners.)
-    if (!window.sidebarOutsideListenerAdded) {
+	if (!window.sidebarOutsideListenerAdded) {
         const collapseSidebar = (event) => {
             // If the click/touch is not inside the sidebar element, collapse it.
             if (sidebar && !sidebar.contains(event.target)) {
@@ -98,8 +93,7 @@ function selectChannel(channel) {
             item.classList.add("active-channel");
         }
     });
-    // Collapse the sidebar when a channel is selected.
-    document.querySelector(".sidebar").classList.add("collapsed");
+	document.querySelector(".sidebar").classList.add("collapsed");
     renderChannel(channel);
 }
 
@@ -782,7 +776,6 @@ function renderWhiteboardChannel(container, channel) {
     const sizeLabel = document.createElement("label");
     sizeLabel.textContent = "Size:";
     toolbar.appendChild(sizeLabel);
-    
     const sizeSlider = document.createElement("input");
     sizeSlider.type = "range";
     sizeSlider.min = "1";
@@ -790,7 +783,6 @@ function renderWhiteboardChannel(container, channel) {
     sizeSlider.value = "2";
     sizeSlider.style.width = "100px";
     toolbar.appendChild(sizeSlider);
-    
     const sizeValue = document.createElement("span");
     sizeValue.textContent = sizeSlider.value;
     toolbar.appendChild(sizeValue);
@@ -838,13 +830,8 @@ function renderWhiteboardChannel(container, channel) {
 
     const ctx = canvas.getContext("2d");
 
-    // Ensure global storage exists
-	if (!window.whiteboardData[channel.id]) {
-        window.whiteboardData[channel.id] = [];
-    }
-    const drawings = window.whiteboardData[channel.id];
-	
-	// State variables
+    // State variables
+    let drawings = window.whiteboardData[channel.id] || [];
     let currentColor = "#000000";
     let currentSize = 2;
     let isEraserActive = false;
@@ -852,8 +839,6 @@ function renderWhiteboardChannel(container, channel) {
     let offsetX = 0, offsetY = 0;
     let scale = 1;
     let leftMouseDown = false, rightMouseDown = false;
-    const prevTouches = [null, null];
-    let singleTouch = false, doubleTouch = false;
 
     // Update cursor visual properties
     function updateCursor() {
@@ -924,27 +909,10 @@ function renderWhiteboardChannel(container, channel) {
         ctx.stroke();
     }
 
-    function distancePointToSegment(p, a, b) {
-        const abx = b.x - a.x;
-        const aby = b.y - a.y;
-        const apx = p.x - a.x;
-        const apy = p.y - a.y;
-        const dot = apx * abx + apy * aby;
-        const lenSq = abx * abx + aby * aby;
-        let t = lenSq !== 0 ? Math.min(1, Math.max(0, dot / lenSq)) : 0;
-        const closestX = a.x + t * abx;
-        const closestY = a.y + t * aby;
-        const dx = p.x - closestX;
-        const dy = p.y - closestY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
-    // Mouse handlers
     function onMouseDown(event) {
         const rect = canvas.getBoundingClientRect();
         cursorX = event.clientX - rect.left;
         cursorY = event.clientY - rect.top;
-
         if (event.button === 0) {
             leftMouseDown = true;
             rightMouseDown = false;
@@ -953,7 +921,6 @@ function renderWhiteboardChannel(container, channel) {
             rightMouseDown = true;
             leftMouseDown = false;
         }
-
         prevCursorX = cursorX;
         prevCursorY = cursorY;
     }
@@ -963,7 +930,6 @@ function renderWhiteboardChannel(container, channel) {
         cursorX = event.clientX - rect.left;
         cursorY = event.clientY - rect.top;
 
-        // Update cursor position and visibility
         cursor.style.display = "block";
         cursor.style.left = `${cursorX}px`;
         cursor.style.top = `${cursorY}px`;
@@ -977,7 +943,6 @@ function renderWhiteboardChannel(container, channel) {
             if (isEraserActive) {
                 const eraserSize = currentSize / scale;
                 const p = { x: scaledX, y: scaledY };
-
                 for (let i = drawings.length - 1; i >= 0; i--) {
                     const segment = drawings[i];
                     const a = { x: segment.x0, y: segment.y0 };
@@ -1000,12 +965,14 @@ function renderWhiteboardChannel(container, channel) {
                 drawLine(prevCursorX, prevCursorY, cursorX, cursorY, currentColor, currentSize);
             }
         }
+
         if (rightMouseDown) {
             cursor.style.display = "none";
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
         }
+
         prevCursorX = cursorX;
         prevCursorY = cursorY;
     }
@@ -1019,103 +986,18 @@ function renderWhiteboardChannel(container, channel) {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
         scale = scale * (1 + scaleAmount);
-
         const rect = canvas.getBoundingClientRect();
         const distX = (event.clientX - rect.left) / canvas.clientWidth;
         const distY = (event.clientY - rect.top) / canvas.clientHeight;
-
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
-
         offsetX -= unitsZoomedX * distX;
         offsetY -= unitsZoomedY * distY;
-
         redrawCanvas();
     }
 
-    // Touch handlers
-    function onTouchStart(event) {
-        if (event.touches.length === 1) {
-            singleTouch = true;
-            doubleTouch = false;
-        }
-        if (event.touches.length >= 2) {
-            singleTouch = false;
-            doubleTouch = true;
-        }
-
-        prevTouches[0] = event.touches[0];
-        prevTouches[1] = event.touches[1];
-    }
-
-    function onTouchMove(event) {
-        const rect = canvas.getBoundingClientRect();
-        const touch0X = event.touches[0].clientX - rect.left;
-        const touch0Y = event.touches[0].clientY - rect.top;
-        const prevTouch0X = prevTouches[0].clientX - rect.left;
-        const prevTouch0Y = prevTouches[0].clientY - rect.top;
-
-        const scaledX = toTrueX(touch0X);
-        const scaledY = toTrueY(touch0Y);
-        const prevScaledX = toTrueX(prevTouch0X);
-        const prevScaledY = toTrueY(prevTouch0Y);
-
-        if (singleTouch) {
-            if (isEraserActive) {
-                const eraserSize = currentSize / scale;
-                const p = { x: scaledX, y: scaledY };
-
-                for (let i = drawings.length - 1; i >= 0; i--) {
-                    const segment = drawings[i];
-                    const a = { x: segment.x0, y: segment.y0 };
-                    const b = { x: segment.x1, y: segment.y1 };
-                    const distance = distancePointToSegment(p, a, b);
-                    if (distance < eraserSize) {
-                        drawings.splice(i, 1);
-                    }
-                }
-                redrawCanvas();
-            } else {
-                drawings.push({
-                    x0: prevScaledX,
-                    y0: prevScaledY,
-                    x1: scaledX,
-                    y1: scaledY,
-                    color: currentColor,
-                    size: currentSize
-                });
-                drawLine(prevTouch0X, prevTouch0Y, touch0X, touch0Y, currentColor, currentSize);
-            }
-        }
-
-        if (doubleTouch) {
-            const touch1X = event.touches[1].clientX - rect.left;
-            const touch1Y = event.touches[1].clientY - rect.top;
-            const prevTouch1X = prevTouches[1].clientX - rect.left;
-            const prevTouch1Y = prevTouches[1].clientY - rect.top;
-
-            const midX = (touch0X + touch1X) / 2;
-            const midY = (touch0Y + touch1Y) / 2;
-            const prevMidX = (prevTouch0X + prevTouch1X) / 2;
-            const prevMidY = (prevTouch0Y + prevTouch1Y) / 2;
-
-            const hypot = Math.hypot(touch0X - touch1X, touch0Y - touch1Y);
-            const prevHypot = Math.hypot(prevTouch0X - prevTouch1X, prevTouch0Y - prevTouch1Y);
-            const zoomAmount = hypot / prevHypot;
-
-            scale *= zoomAmount;
-            offsetX += (midX - prevMidX) / scale;
-            offsetY += (midY - prevMidY) / scale;
-            redrawCanvas();
-        }
-
-        prevTouches[0] = event.touches[0];
-        prevTouches[1] = event.touches[1];
-    }
-
-    function onTouchEnd() {
-        singleTouch = false;
-        doubleTouch = false;
+    function saveDrawings() {
+        window.whiteboardData[channel.id] = drawings;
     }
 
     // Event listeners
@@ -1124,13 +1006,10 @@ function renderWhiteboardChannel(container, channel) {
     canvas.addEventListener("mouseout", onMouseUp);
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("wheel", onMouseWheel);
-    canvas.addEventListener("touchstart", onTouchStart);
-    canvas.addEventListener("touchend", onTouchEnd);
-    canvas.addEventListener("touchcancel", onTouchEnd);
-    canvas.addEventListener("touchmove", onTouchMove);
     canvas.addEventListener("mouseleave", () => {
         cursor.style.display = "none";
     });
+
     document.oncontextmenu = () => false;
 
     // Tool controls
@@ -1154,14 +1033,17 @@ function renderWhiteboardChannel(container, channel) {
     clearButton.addEventListener("click", () => {
         drawings = [];
         redrawCanvas();
+        saveDrawings();
     });
 
     // Initial setup
     updateCursor();
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
-}
 
+    // Save drawings before leaving the channel
+    container.addEventListener("unload", saveDrawings);
+}
 /***********************
  * 4. Code Runner (Full code editor, non-resizable)
  ***********************/
@@ -1186,44 +1068,32 @@ function renderCodeChannel(container, channel) {
     codeArea.style.boxSizing = "border-box";
     codeArea.style.resize = "none";
     wrapper.appendChild(codeArea);
+    if (window.codeData[channel.id]) {
+        codeArea.value = window.codeData[channel.id];
+    }
+    codeArea.addEventListener("input", () => {
+        window.codeData[channel.id] = codeArea.value;
+    });
 
     const outputDiv = document.createElement("div");
     outputDiv.classList.add("code-runner-output");
     wrapper.appendChild(outputDiv);
 
-    // Ensure the codeData object exists for this channel
-    if (!window.codeData[channel.id]) {
-        window.codeData[channel.id] = { code: "", output: "" };
-    }
-
-    // Load stored code and output
-    codeArea.value = window.codeData[channel.id].code;
-    outputDiv.textContent = window.codeData[channel.id].output;
-
-    codeArea.addEventListener("input", () => {
-        window.codeData[channel.id].code = codeArea.value;
-    });
-
     runBtn.addEventListener("click", () => {
         const code = codeArea.value;
         const logs = [];
         const originalConsoleLog = console.log;
-        
         console.log = function (...args) {
             logs.push(args.join(" "));
             originalConsoleLog.apply(console, args);
         };
-
         try {
             const result = eval(code);
             let outputText = logs.length > 0 ? logs.join("\n") : (result !== undefined ? result : "Code executed successfully.");
             outputDiv.textContent = outputText;
-            window.codeData[channel.id].output = outputText; // Store output
         } catch (error) {
             outputDiv.textContent = "Error: " + error;
-            window.codeData[channel.id].output = "Error: " + error; // Store error output
         }
-
         console.log = originalConsoleLog;
     });
 }

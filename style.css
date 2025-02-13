@@ -1,7 +1,7 @@
 :root {
 --color-primary: #2c3e50;
 --color-secondary: #34495e;
---color-accent: #1a86bc;
+--color-accent: #007bff;
 --color-background: #ecf0f1;
 --color-white: #ffffff;
 --color-text-light: #ecf0f1;
@@ -38,53 +38,54 @@ display: flex;
 height: 100vh;
 }
 
+/* Sidebar Styles */
 .sidebar {
-width: 180px;
-background: var(--color-primary);
-color: var(--color-text-light);
-padding: 20px;
-overflow-y: auto;
-position: fixed;
-transition: width 0.3s;
-left: 0;
-top: 0;
-bottom: 0;
-z-index: 1000;
+  width: 180px;
+  background: var(--color-primary);
+  color: var(--color-text-light);
+  padding: 20px;
+  overflow-y: auto;
+  overflow: visible;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  transition: left 0.3s ease-in-out; /* Smooth transition for moving */
+  z-index: 1000;
 }
 
+/* Collapsed Sidebar */
 .sidebar.collapsed {
-width: 0;
-overflow: visible;
-padding: 0;
+  left: -220px; /* Move the sidebar partially off-screen */
+  overflow: visible;
+  padding: 20px; /* Reset padding */
 }
 
-.sidebar.collapsed h2,
-.sidebar.collapsed .channel-list {
-display: none;
-}
-
+/* Collapse Button */
 .collapse-btn {
-position: absolute;
-right: 10px;
-top: 10px;
-background: var(--color-primary);
-border: none;
-color: var(--color-text-light);
-font-size: var(--font-size-small);
-cursor: pointer;
-padding: 8px 12px;
-transition: all 0.3s;
-border-radius: var(--border-radius-small);
-z-index: 1001;
+  position: absolute;
+  top: 10px;
+  right: 10px; /* Align to the top-right corner of the sidebar */
+  background: var(--color-accent);
+  border: none;
+  color: var(--color-text-light);
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: var(--border-radius-small);
+  z-index: 1001;
+  transition: transform 0.3s ease-in-out, right 0.3s ease-in-out; /* Smooth rotation and position change */
 }
 
+/* Position the button when the sidebar is expanded */
+.sidebar:not(.collapsed) .collapse-btn {
+  right: 10px; /* Align to the top-right corner of the sidebar */
+}
+
+/* Rotate the button when the sidebar is collapsed */
 .sidebar.collapsed .collapse-btn {
-left: 100%;
-right: auto;
-margin-left: 10px;
-transform: rotate(180deg);
-background: var(--color-accent);
-border-radius: var(--border-radius-small);
+  transform: scaleX(-1); /* Rotate by 180 degrees */
+  right: -44px; /* Keep it aligned to the top-right of the collapsed sidebar */
 }
 
 .sidebar h2 {
