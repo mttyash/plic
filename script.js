@@ -909,6 +909,21 @@ function renderWhiteboardChannel(container, channel) {
         ctx.stroke();
     }
 
+    function distancePointToSegment(p, a, b) {
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const apx = p.x - a.x;
+        const apy = p.y - a.y;
+        const dot = apx * abx + apy * aby;
+        const lenSq = abx * abx + aby * aby;
+        let t = lenSq !== 0 ? Math.min(1, Math.max(0, dot / lenSq)) : 0;
+        const closestX = a.x + t * abx;
+        const closestY = a.y + t * aby;
+        const dx = p.x - closestX;
+        const dy = p.y - closestY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
     function onMouseDown(event) {
         const rect = canvas.getBoundingClientRect();
         cursorX = event.clientX - rect.left;
@@ -943,15 +958,19 @@ function renderWhiteboardChannel(container, channel) {
             if (isEraserActive) {
                 const eraserSize = currentSize / scale;
                 const p = { x: scaledX, y: scaledY };
+
+                // Remove intersecting lines
                 for (let i = drawings.length - 1; i >= 0; i--) {
                     const segment = drawings[i];
                     const a = { x: segment.x0, y: segment.y0 };
                     const b = { x: segment.x1, y: segment.y1 };
                     const distance = distancePointToSegment(p, a, b);
+
                     if (distance < eraserSize) {
                         drawings.splice(i, 1);
                     }
                 }
+
                 redrawCanvas();
             } else {
                 drawings.push({
@@ -960,9 +979,17 @@ function renderWhiteboardChannel(container, channel) {
                     x1: scaledX,
                     y1: scaledY,
                     color: currentColor,
-                    size: currentSize
+                    size: currentSize,
                 });
-                drawLine(prevCursorX, prevCursorY, cursorX, cursorY, currentColor, currentSize);
+
+                drawLine(
+                    prevCursorX,
+                    prevCursorY,
+                    cursorX,
+                    cursorY,
+                    currentColor,
+                    currentSize
+                );
             }
         }
 
@@ -986,13 +1013,17 @@ function renderWhiteboardChannel(container, channel) {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
         scale = scale * (1 + scaleAmount);
+
         const rect = canvas.getBoundingClientRect();
         const distX = (event.clientX - rect.left) / canvas.clientWidth;
         const distY = (event.clientY - rect.top) / canvas.clientHeight;
+
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
+
         offsetX -= unitsZoomedX * distX;
         offsetY -= unitsZoomedY * distY;
+
         redrawCanvas();
     }
 
@@ -1009,7 +1040,6 @@ function renderWhiteboardChannel(container, channel) {
     canvas.addEventListener("mouseleave", () => {
         cursor.style.display = "none";
     });
-
     document.oncontextmenu = () => false;
 
     // Tool controls
@@ -1044,6 +1074,7 @@ function renderWhiteboardChannel(container, channel) {
     // Save drawings before leaving the channel
     container.addEventListener("unload", saveDrawings);
 }
+
 /***********************
  * 4. Code Runner (Full code editor, non-resizable)
  ***********************/
