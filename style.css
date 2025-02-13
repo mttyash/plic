@@ -117,13 +117,13 @@ background: var(--color-accent);
 }
 
 .main-content {
-flex: 1;
-margin-left: 0;
-padding: 20px;
-height: 100vh;
-overflow: hidden;
-background: var(--color-background);
-transition: margin-left 0.3s;
+    flex: 1;
+    margin-left: 0;
+    padding: 20px;
+    height: calc(100vh - 40px); /* Adjust height to fit inside viewport */
+    overflow: hidden;
+    background: var(--color-background);
+    transition: margin-left 0.3s;
 }
 
 .sidebar.collapsed ~ .main-content {

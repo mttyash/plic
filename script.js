@@ -5,7 +5,7 @@ const categories = [{
         name: "General",
         channels: [{
                 id: "text1",
-                name: "General Chat",
+                name: "Chat",
                 type: "text"
             }
         ]
@@ -21,7 +21,7 @@ const categories = [{
                 type: "whiteboard"
             }, {
                 id: "code1",
-                name: "Code Runner",
+                name: "IDE",
                 type: "code"
             }
         ]
@@ -29,7 +29,7 @@ const categories = [{
         name: "Reminders",
         channels: [{
                 id: "reminder1",
-                name: "My Reminders",
+                name: "Reminders",
                 type: "reminder"
             }
         ]
@@ -51,11 +51,13 @@ if (!window.codeData)
 function renderSidebar() {
     const sidebar = document.querySelector(".sidebar");
     sidebar.innerHTML = "";
+    
     const collapseBtn = document.createElement("button");
     collapseBtn.textContent = "◀";
     collapseBtn.classList.add("collapse-btn");
     collapseBtn.addEventListener("click", () => sidebar.classList.toggle("collapsed"));
     sidebar.appendChild(collapseBtn);
+    
     categories.forEach(category => {
         const catTitle = document.createElement("h2");
         catTitle.textContent = category.name;
@@ -73,6 +75,20 @@ function renderSidebar() {
         });
         sidebar.appendChild(ul);
     });
+    
+    // Add an event listener to collapse the sidebar if a click or touch occurs outside of it.
+    // (We add these listeners only once to avoid duplicate listeners.)
+    if (!window.sidebarOutsideListenerAdded) {
+        const collapseSidebar = (event) => {
+            // If the click/touch is not inside the sidebar element, collapse it.
+            if (sidebar && !sidebar.contains(event.target)) {
+                sidebar.classList.add("collapsed");
+            }
+        };
+        document.addEventListener("click", collapseSidebar);
+        document.addEventListener("touchstart", collapseSidebar);
+        window.sidebarOutsideListenerAdded = true;
+    }
 }
 
 function selectChannel(channel) {
@@ -82,6 +98,8 @@ function selectChannel(channel) {
             item.classList.add("active-channel");
         }
     });
+    // Collapse the sidebar when a channel is selected.
+    document.querySelector(".sidebar").classList.add("collapsed");
     renderChannel(channel);
 }
 
@@ -820,8 +838,13 @@ function renderWhiteboardChannel(container, channel) {
 
     const ctx = canvas.getContext("2d");
 
-    // State variables
-    let drawings = [];
+    // Ensure global storage exists
+	if (!window.whiteboardData[channel.id]) {
+        window.whiteboardData[channel.id] = [];
+    }
+    const drawings = window.whiteboardData[channel.id];
+	
+	// State variables
     let currentColor = "#000000";
     let currentSize = 2;
     let isEraserActive = false;
@@ -1163,32 +1186,44 @@ function renderCodeChannel(container, channel) {
     codeArea.style.boxSizing = "border-box";
     codeArea.style.resize = "none";
     wrapper.appendChild(codeArea);
-    if (window.codeData[channel.id]) {
-        codeArea.value = window.codeData[channel.id];
-    }
-    codeArea.addEventListener("input", () => {
-        window.codeData[channel.id] = codeArea.value;
-    });
 
     const outputDiv = document.createElement("div");
     outputDiv.classList.add("code-runner-output");
     wrapper.appendChild(outputDiv);
 
+    // Ensure the codeData object exists for this channel
+    if (!window.codeData[channel.id]) {
+        window.codeData[channel.id] = { code: "", output: "" };
+    }
+
+    // Load stored code and output
+    codeArea.value = window.codeData[channel.id].code;
+    outputDiv.textContent = window.codeData[channel.id].output;
+
+    codeArea.addEventListener("input", () => {
+        window.codeData[channel.id].code = codeArea.value;
+    });
+
     runBtn.addEventListener("click", () => {
         const code = codeArea.value;
         const logs = [];
         const originalConsoleLog = console.log;
+        
         console.log = function (...args) {
             logs.push(args.join(" "));
             originalConsoleLog.apply(console, args);
         };
+
         try {
             const result = eval(code);
             let outputText = logs.length > 0 ? logs.join("\n") : (result !== undefined ? result : "Code executed successfully.");
             outputDiv.textContent = outputText;
+            window.codeData[channel.id].output = outputText; // Store output
         } catch (error) {
             outputDiv.textContent = "Error: " + error;
+            window.codeData[channel.id].output = "Error: " + error; // Store error output
         }
+
         console.log = originalConsoleLog;
     });
 }
