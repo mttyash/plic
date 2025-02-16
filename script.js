@@ -118,11 +118,11 @@ function renderChannel(channel) {
  ***********************/
 function renderTextChannel(container, channel) {
     container.innerHTML = "";
-	
-	const header = document.createElement("h2");
+
+    const header = document.createElement("h2");
     header.textContent = "Text Channel";
     container.appendChild(header);
-	
+
     const chatContainer = document.createElement("div");
     chatContainer.classList.add("chat-container");
     chatContainer.style.height = "90%";
@@ -755,11 +755,39 @@ function renderFlashcardChannel(container, channel) {
  * 3. Whiteboard (Full-screen canvas with relative brush size and brush indicator)
  ***********************/
 function renderWhiteboardChannel(container, channel) {
-    // Get our canvas element
-	const header = document.createElement("h2");
+    // Create header
+    const header = document.createElement("h2");
     header.textContent = "Whiteboard";
     container.appendChild(header);
-	
+
+    // Create toolbar
+    const toolbar = document.createElement("div");
+    toolbar.style.display = "flex";
+    toolbar.style.gap = "10px";
+    toolbar.style.marginBottom = "10px";
+
+    // Color Picker
+    const colorPicker = document.createElement("input");
+    colorPicker.type = "color";
+    colorPicker.value = "#000000";
+    toolbar.appendChild(colorPicker);
+
+    // Size Slider
+    const sizeSlider = document.createElement("input");
+    sizeSlider.type = "range";
+    sizeSlider.min = "1";
+    sizeSlider.max = "10";
+    sizeSlider.value = "2";
+    toolbar.appendChild(sizeSlider);
+
+    // Eraser Button
+    const eraserButton = document.createElement("button");
+    eraserButton.textContent = "Eraser";
+    toolbar.appendChild(eraserButton);
+
+    container.appendChild(toolbar);
+
+    // Create canvas
     const canvas = document.createElement("canvas");
     container.appendChild(canvas);
     const context = canvas.getContext("2d");
@@ -769,25 +797,42 @@ function renderWhiteboardChannel(container, channel) {
         return false;
     }
 
-    // List of all strokes drawn
-    const drawings = [];
-	// Load previously saved drawings for the current channel, if they exist
-	if (window.whiteboardData[channel]) {
-		drawings.push(...window.whiteboardData[channel]);
-	}
+    // Load saved drawings for the channel
+    if (!window.whiteboardData[channel]) {
+        window.whiteboardData[channel] = [];
+    }
+    const drawings = window.whiteboardData[channel];
 
-    // Coordinates of our cursor
-    let cursorX;
-    let cursorY;
-    let prevCursorX;
-    let prevCursorY;
+    // Cursor position
+    let cursorX,
+    cursorY,
+    prevCursorX,
+    prevCursorY;
 
-    // Distance from origin
-    let offsetX = 0;
-    let offsetY = 0;
+    // Offset and zoom
+    let offsetX = 0,
+    offsetY = 0,
+    scale = 1;
 
-    // Zoom amount
-    let scale = 1;
+    // Brush settings
+    let brushColor = "#000000";
+    let brushSize = 2;
+    let eraserMode = false;
+
+    // Event listeners for controls
+    colorPicker.addEventListener("input", () => {
+        brushColor = colorPicker.value;
+        eraserMode = false;
+    });
+
+    sizeSlider.addEventListener("input", () => {
+        brushSize = parseInt(sizeSlider.value, 10);
+    });
+
+    eraserButton.addEventListener("click", () => {
+        eraserMode = !eraserMode;
+        eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : "";
+    });
 
     // Convert coordinates
     function toScreenX(xTrue) {
@@ -802,68 +847,44 @@ function renderWhiteboardChannel(container, channel) {
     function toTrueY(yScreen) {
         return (yScreen / scale) - offsetY;
     }
-    function trueHeight() {
-        return canvas.clientHeight / scale;
-    }
+
     function trueWidth() {
         return canvas.clientWidth / scale;
     }
+    function trueHeight() {
+        return canvas.clientHeight / scale;
+    }
 
     function redrawCanvas() {
-        // Set the canvas to the size of the window
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
 
         context.fillStyle = '#fff';
         context.fillRect(0, 0, canvas.width, canvas.height);
+
         for (let i = 0; i < drawings.length; i++) {
             const line = drawings[i];
-            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1));
+            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
         }
     }
     redrawCanvas();
 
-    // If the window changes size, redraw the canvas
-    window.addEventListener("resize", (event) => {
-        redrawCanvas();
+    window.addEventListener("resize", () => redrawCanvas());
+
+    // Mouse Events
+    let leftMouseDown = false,
+    rightMouseDown = false;
+
+    canvas.addEventListener('mousedown', (event) => {
+        if (event.button === 0)
+            leftMouseDown = true;
+        if (event.button === 2)
+            rightMouseDown = true;
+        cursorX = prevCursorX = event.offsetX;
+        cursorY = prevCursorY = event.offsetY;
     });
 
-    // Mouse Event Handlers
-    canvas.addEventListener('mousedown', onMouseDown);
-    canvas.addEventListener('mouseup', onMouseUp, false);
-    canvas.addEventListener('mouseout', onMouseUp, false);
-    canvas.addEventListener('mousemove', onMouseMove, false);
-    canvas.addEventListener('wheel', onMouseWheel, false);
-
-    // Touch Event Handlers
-    canvas.addEventListener('touchstart', onTouchStart);
-    canvas.addEventListener('touchend', onTouchEnd);
-    canvas.addEventListener('touchcancel', onTouchEnd);
-    canvas.addEventListener('touchmove', onTouchMove);
-
-    // Mouse functions
-    let leftMouseDown = false;
-    let rightMouseDown = false;
-    function onMouseDown(event) {
-        // Detect left clicks
-        if (event.button == 0) {
-            leftMouseDown = true;
-            rightMouseDown = false;
-        }
-        // Detect right clicks
-        if (event.button == 2) {
-            rightMouseDown = true;
-            leftMouseDown = false;
-        }
-
-        // Update the cursor coordinates
-        cursorX = event.offsetX;
-        cursorY = event.offsetY;
-        prevCursorX = event.offsetX;
-        prevCursorY = event.offsetY;
-    }
-    function onMouseMove(event) {
-        // Get mouse position
+    canvas.addEventListener('mousemove', (event) => {
         cursorX = event.offsetX;
         cursorY = event.offsetY;
         const scaledX = toTrueX(cursorX);
@@ -872,84 +893,116 @@ function renderWhiteboardChannel(container, channel) {
         const prevScaledY = toTrueY(prevCursorY);
 
         if (leftMouseDown) {
-            // Add the line to our drawing history
-            drawings.push({
-                x0: prevScaledX,
-                y0: prevScaledY,
-                x1: scaledX,
-                y1: scaledY
-            })
-			// Save drawings to whiteboardData when a line is drawn
-			if (!window.whiteboardData[channel]) {
-				window.whiteboardData[channel] = [];
-			}
-			window.whiteboardData[channel] = [...window.whiteboardData[channel], { x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY }];
-            // Draw a line
-            drawLine(prevCursorX, prevCursorY, cursorX, cursorY);
+            if (eraserMode) {
+                // Remove strokes that intersect with the eraser
+                for (let i = drawings.length - 1; i >= 0; i--) {
+                    let d = drawings[i];
+                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                        drawings.splice(i, 1);
+                    }
+                }
+                window.whiteboardData[channel] = drawings;
+                redrawCanvas();
+            } else {
+                const newLine = {
+                    x0: prevScaledX,
+                    y0: prevScaledY,
+                    x1: scaledX,
+                    y1: scaledY,
+                    color: brushColor,
+                    size: brushSize
+                };
+                drawings.push(newLine);
+                window.whiteboardData[channel] = drawings;
+                drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
+            }
         }
+
         if (rightMouseDown) {
-            // Move the screen
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
         }
+
         prevCursorX = cursorX;
         prevCursorY = cursorY;
-    }
-    function onMouseUp() {
+    });
+
+    canvas.addEventListener('mouseup', () => {
         leftMouseDown = false;
         rightMouseDown = false;
-    }
-    function onMouseWheel(event) {
+    });
+
+    canvas.addEventListener('wheel', (event) => {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
-        scale = scale * (1 + scaleAmount);
+        scale *= (1 + scaleAmount);
 
-        // Zoom the page based on where the cursor is
-        var distX = event.offsetX / canvas.width;
-        var distY = event.offsetY / canvas.height;
-
-        // Calculate how much we need to zoom
+        const distX = event.offsetX / canvas.width;
+        const distY = event.offsetY / canvas.height;
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
 
-        const unitsAddLeft = unitsZoomedX * distX;
-        const unitsAddTop = unitsZoomedY * distY;
-
-        offsetX -= unitsAddLeft;
-        offsetY -= unitsAddTop;
+        offsetX -= unitsZoomedX * distX;
+        offsetY -= unitsZoomedY * distY;
 
         redrawCanvas();
-    }
-    function drawLine(x0, y0, x1, y1) {
+    });
+
+    function drawLine(x0, y0, x1, y1, color, size) {
         context.beginPath();
         context.moveTo(x0, y0);
         context.lineTo(x1, y1);
-        context.strokeStyle = '#000';
-        context.lineWidth = 2;
+        context.strokeStyle = color;
+        context.lineWidth = size;
+        context.lineCap = "round";
         context.stroke();
     }
 
-    // Touch functions
-    const prevTouches = [null, null]; // up to 2 touches
-    let singleTouch = false;
-    let doubleTouch = false;
-    function onTouchStart(event) {
-        if (event.touches.length == 1) {
-            singleTouch = true;
-            doubleTouch = false;
-        }
-        if (event.touches.length >= 2) {
-            singleTouch = false;
-            doubleTouch = true;
+    function isNearLine(x0, y0, x1, y1, px, py, threshold) {
+        const A = px - x0;
+        const B = py - y0;
+        const C = x1 - x0;
+        const D = y1 - y0;
+
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = lenSq !== 0 ? dot / lenSq : -1;
+
+        let nearestX,
+        nearestY;
+        if (param < 0) {
+            nearestX = x0;
+            nearestY = y0;
+        } else if (param > 1) {
+            nearestX = x1;
+            nearestY = y1;
+        } else {
+            nearestX = x0 + param * C;
+            nearestY = y0 + param * D;
         }
 
-        // Store the last touches
+        const dist = Math.hypot(px - nearestX, py - nearestY);
+        return dist <= threshold;
+    }
+
+    // Touch Events
+    const prevTouches = [null, null];
+    let singleTouch = false,
+    doubleTouch = false;
+
+    canvas.addEventListener('touchstart', (event) => {
+        if (event.touches.length == 1)
+            singleTouch = true;
+        if (event.touches.length >= 2)
+            doubleTouch = true;
         prevTouches[0] = event.touches[0];
         prevTouches[1] = event.touches[1];
-    }
-    function onTouchMove(event) {
-        // Get first touch coordinates
+    });
+
+    canvas.addEventListener('touchmove', (event) => {
+        event.preventDefault(); // Prevents scrolling while drawing
+
         const touch0X = event.touches[0].clientX - canvas.getBoundingClientRect().left;
         const touch0Y = event.touches[0].clientY - canvas.getBoundingClientRect().top;
         const prevTouch0X = prevTouches[0].clientX - canvas.getBoundingClientRect().left;
@@ -961,73 +1014,36 @@ function renderWhiteboardChannel(container, channel) {
         const prevScaledY = toTrueY(prevTouch0Y);
 
         if (singleTouch) {
-            // Add to history
-            drawings.push({
-                x0: prevScaledX,
-                y0: prevScaledY,
-                x1: scaledX,
-                y1: scaledY
-            })
-			// Save drawings to whiteboardData when a line is drawn
-			if (!window.whiteboardData[channel]) {
-				window.whiteboardData[channel] = [];
-			}
-			window.whiteboardData[channel] = [...window.whiteboardData[channel], { x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY }];
-            drawLine(prevTouch0X, prevTouch0Y, touch0X, touch0Y);
+            if (eraserMode) {
+                // Erase strokes that are touched
+                for (let i = drawings.length - 1; i >= 0; i--) {
+                    let d = drawings[i];
+                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                        drawings.splice(i, 1);
+                    }
+                }
+                window.whiteboardData[channel] = drawings;
+                redrawCanvas();
+            } else {
+                drawings.push({
+                    x0: prevScaledX,
+                    y0: prevScaledY,
+                    x1: scaledX,
+                    y1: scaledY,
+                    color: brushColor,
+                    size: brushSize
+                });
+                drawLine(prevTouch0X, prevTouch0Y, touch0X, touch0Y, brushColor, brushSize);
+            }
         }
 
-        if (doubleTouch) {
-            // Get second touch coordinates
-            const touch1X = event.touches[1].clientX - canvas.getBoundingClientRect().left;
-            const touch1Y = event.touches[1].clientY - canvas.getBoundingClientRect().top;
-            const prevTouch1X = prevTouches[1].clientX - canvas.getBoundingClientRect().left;
-            const prevTouch1Y = prevTouches[1].clientY - canvas.getBoundingClientRect().top;
-
-            // Get midpoints
-            const midX = (touch0X + touch1X) / 2;
-            const midY = (touch0Y + touch1Y) / 2;
-            const prevMidX = (prevTouch0X + prevTouch1X) / 2;
-            const prevMidY = (prevTouch0Y + prevTouch1Y) / 2;
-
-            // Calculate the distances between the touches
-            const hypot = Math.sqrt(Math.pow((touch0X - touch1X), 2) + Math.pow((touch0Y - touch1Y), 2));
-            const prevHypot = Math.sqrt(Math.pow((prevTouch0X - prevTouch1X), 2) + Math.pow((prevTouch0Y - prevTouch1Y), 2));
-
-            // Calculate the screen scale change
-            var zoomAmount = hypot / prevHypot;
-            scale = scale * zoomAmount;
-            const scaleAmount = 1 - zoomAmount;
-
-            // Calculate how many pixels the midpoints have moved in the x and y direction
-            const panX = midX - prevMidX;
-            const panY = midY - prevMidY;
-            // Scale this movement based on the zoom level
-            offsetX += (panX / scale);
-            offsetY += (panY / scale);
-
-            // Get the relative position of the middle of the zoom.
-            var zoomRatioX = midX / canvas.clientWidth;
-            var zoomRatioY = midY / canvas.clientHeight;
-
-            // Calculate the amounts zoomed from each edge of the screen
-            const unitsZoomedX = trueWidth() * scaleAmount;
-            const unitsZoomedY = trueHeight() * scaleAmount;
-
-            const unitsAddLeft = unitsZoomedX * zoomRatioX;
-            const unitsAddTop = unitsZoomedY * zoomRatioY;
-
-            offsetX += unitsAddLeft;
-            offsetY += unitsAddTop;
-
-            redrawCanvas();
-        }
         prevTouches[0] = event.touches[0];
-        prevTouches[1] = event.touches[1];
-    }
-    function onTouchEnd(event) {
+    });
+
+    canvas.addEventListener('touchend', () => {
         singleTouch = false;
         doubleTouch = false;
-    }
+    });
 }
 
 /***********************
