@@ -2,7 +2,7 @@
  * Data & Initialization
  ***********************/
 const categories = [{
-        name: "General",
+        name: "General v1.8",
         channels: [{
                 id: "text1",
                 name: "General Chat",
@@ -793,9 +793,7 @@ function renderWhiteboardChannel(container, channel) {
     const context = canvas.getContext("2d");
 
     // Disable right-clicking
-    document.oncontextmenu = function () {
-        return false;
-    }
+    document.oncontextmenu = function () { return false; }
 
     // Load saved drawings for the channel
     if (!window.whiteboardData[channel]) {
@@ -804,15 +802,10 @@ function renderWhiteboardChannel(container, channel) {
     const drawings = window.whiteboardData[channel];
 
     // Cursor position
-    let cursorX,
-    cursorY,
-    prevCursorX,
-    prevCursorY;
+    let cursorX, cursorY, prevCursorX, prevCursorY;
 
     // Offset and zoom
-    let offsetX = 0,
-    offsetY = 0,
-    scale = 1;
+    let offsetX = 0, offsetY = 0, scale = 1;
 
     // Brush settings
     let brushColor = "#000000";
@@ -824,66 +817,45 @@ function renderWhiteboardChannel(container, channel) {
         brushColor = colorPicker.value;
         eraserMode = false;
     });
-
     sizeSlider.addEventListener("input", () => {
         brushSize = parseInt(sizeSlider.value, 10);
     });
-
     eraserButton.addEventListener("click", () => {
         eraserMode = !eraserMode;
         eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : "";
     });
 
-    // Convert coordinates
-    function toScreenX(xTrue) {
-        return (xTrue + offsetX) * scale;
-    }
-    function toScreenY(yTrue) {
-        return (yTrue + offsetY) * scale;
-    }
-    function toTrueX(xScreen) {
-        return (xScreen / scale) - offsetX;
-    }
-    function toTrueY(yScreen) {
-        return (yScreen / scale) - offsetY;
-    }
-
-    function trueWidth() {
-        return canvas.clientWidth / scale;
-    }
-    function trueHeight() {
-        return canvas.clientHeight / scale;
-    }
+    // Coordinate conversion functions
+    function toScreenX(xTrue) { return (xTrue + offsetX) * scale; }
+    function toScreenY(yTrue) { return (yTrue + offsetY) * scale; }
+    function toTrueX(xScreen) { return (xScreen / scale) - offsetX; }
+    function toTrueY(yScreen) { return (yScreen / scale) - offsetY; }
+    function trueWidth() { return canvas.clientWidth / scale; }
+    function trueHeight() { return canvas.clientHeight / scale; }
 
     function redrawCanvas() {
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
-
         context.fillStyle = '#fff';
         context.fillRect(0, 0, canvas.width, canvas.height);
-
         for (let i = 0; i < drawings.length; i++) {
             const line = drawings[i];
-            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
+            drawLine(toScreenX(line.x0), toScreenY(line.y0),
+                     toScreenX(line.x1), toScreenY(line.y1),
+                     line.color, line.size);
         }
     }
     redrawCanvas();
-
     window.addEventListener("resize", () => redrawCanvas());
 
-    // Mouse Events
-    let leftMouseDown = false,
-    rightMouseDown = false;
-
+    // --- Mouse Events ---
+    let leftMouseDown = false, rightMouseDown = false;
     canvas.addEventListener('mousedown', (event) => {
-        if (event.button === 0)
-            leftMouseDown = true;
-        if (event.button === 2)
-            rightMouseDown = true;
+        if (event.button === 0) leftMouseDown = true;
+        if (event.button === 2) rightMouseDown = true;
         cursorX = prevCursorX = event.offsetX;
         cursorY = prevCursorY = event.offsetY;
     });
-
     canvas.addEventListener('mousemove', (event) => {
         cursorX = event.offsetX;
         cursorY = event.offsetY;
@@ -894,7 +866,7 @@ function renderWhiteboardChannel(container, channel) {
 
         if (leftMouseDown) {
             if (eraserMode) {
-                // Remove strokes that intersect with the eraser
+                // Erase strokes near the current mouse position
                 for (let i = drawings.length - 1; i >= 0; i--) {
                     let d = drawings[i];
                     if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
@@ -917,35 +889,28 @@ function renderWhiteboardChannel(container, channel) {
                 drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
             }
         }
-
         if (rightMouseDown) {
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
         }
-
         prevCursorX = cursorX;
         prevCursorY = cursorY;
     });
-
     canvas.addEventListener('mouseup', () => {
         leftMouseDown = false;
         rightMouseDown = false;
     });
-
     canvas.addEventListener('wheel', (event) => {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
         scale *= (1 + scaleAmount);
-
         const distX = event.offsetX / canvas.width;
         const distY = event.offsetY / canvas.height;
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
-
         offsetX -= unitsZoomedX * distX;
         offsetY -= unitsZoomedY * distY;
-
         redrawCanvas();
     });
 
@@ -958,116 +923,106 @@ function renderWhiteboardChannel(container, channel) {
         context.lineCap = "round";
         context.stroke();
     }
-
     function isNearLine(x0, y0, x1, y1, px, py, threshold) {
-        const A = px - x0;
-        const B = py - y0;
-        const C = x1 - x0;
-        const D = y1 - y0;
-
+        const A = px - x0, B = py - y0;
+        const C = x1 - x0, D = y1 - y0;
         const dot = A * C + B * D;
         const lenSq = C * C + D * D;
         let param = lenSq !== 0 ? dot / lenSq : -1;
-
-        let nearestX,
-        nearestY;
-        if (param < 0) {
-            nearestX = x0;
-            nearestY = y0;
-        } else if (param > 1) {
-            nearestX = x1;
-            nearestY = y1;
-        } else {
-            nearestX = x0 + param * C;
-            nearestY = y0 + param * D;
-        }
-
-        const dist = Math.hypot(px - nearestX, py - nearestY);
-        return dist <= threshold;
+        let nearestX, nearestY;
+        if (param < 0) { nearestX = x0; nearestY = y0; }
+        else if (param > 1) { nearestX = x1; nearestY = y1; }
+        else { nearestX = x0 + param * C; nearestY = y0 + param * D; }
+        return Math.hypot(px - nearestX, py - nearestY) <= threshold;
     }
 
-    // Touch Events
+    // --- Touch Events ---
     const prevTouches = [null, null];
-    let singleTouch = false,
-    doubleTouch = false;
-
+    let singleTouch = false, doubleTouch = false;
     canvas.addEventListener('touchstart', (event) => {
-        if (event.touches.length == 1)
+        if (event.touches.length === 1) {
             singleTouch = true;
-        if (event.touches.length >= 2)
-            doubleTouch = true;
-        prevTouches[0] = event.touches[0];
-        prevTouches[1] = event.touches[1];
-    });
-
-    canvas.addEventListener('touchmove', (event) => {
-    if (event.touches.length === 1) {
-        // Single-finger touch (drawing or erasing)
-        event.preventDefault(); // Prevents page scrolling
-
-        const touch = event.touches[0];
-        const touchX = touch.clientX - canvas.getBoundingClientRect().left;
-        const touchY = touch.clientY - canvas.getBoundingClientRect().top;
-
-        const scaledX = toTrueX(touchX);
-        const scaledY = toTrueY(touchY);
-        const prevScaledX = toTrueX(prevTouches[0].clientX - canvas.getBoundingClientRect().left);
-        const prevScaledY = toTrueY(prevTouches[0].clientY - canvas.getBoundingClientRect().top);
-
-        if (eraserMode) {
-            for (let i = drawings.length - 1; i >= 0; i--) {
-                let d = drawings[i];
-                if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
-                    drawings.splice(i, 1);
-                }
-            }
-            redrawCanvas();
-        } else {
-            drawings.push({ x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY, color: brushColor, size: brushSize });
-            drawLine(prevTouches[0].clientX, prevTouches[0].clientY, touch.clientX, touch.clientY, brushColor, brushSize);
+            doubleTouch = false;
         }
-
+        if (event.touches.length >= 2) {
+            singleTouch = false;
+            doubleTouch = true;
+        }
         prevTouches[0] = event.touches[0];
-
-    } else if (event.touches.length === 2) {
-        // Two-finger touch (panning & zooming)
-        event.preventDefault(); // Prevents weird browser gestures
-
-        const touch1 = event.touches[0];
-        const touch2 = event.touches[1];
-
-        const newDist = Math.hypot(
-            touch2.clientX - touch1.clientX,
-            touch2.clientY - touch1.clientY
-        );
-
-        if (prevTouches[1]) {
-            const prevDist = Math.hypot(
-                prevTouches[1].clientX - prevTouches[0].clientX,
-                prevTouches[1].clientY - prevTouches[0].clientY
-            );
-
-            const scaleAmount = (newDist - prevDist) / 200; // Adjust zoom sensitivity
-            scale *= (1 + scaleAmount);
-
-            // Panning
-            const deltaX = (touch1.clientX + touch2.clientX) / 2 - (prevTouches[0].clientX + prevTouches[1].clientX) / 2;
-            const deltaY = (touch1.clientY + touch2.clientY) / 2 - (prevTouches[0].clientY + prevTouches[1].clientY) / 2;
-
+        if (event.touches.length > 1) {
+            prevTouches[1] = event.touches[1];
+        }
+    });
+    canvas.addEventListener('touchmove', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        if (event.touches.length === 1) {
+            event.preventDefault(); // Prevent scrolling
+            const touch = event.touches[0];
+            const touchX = touch.clientX - rect.left;
+            const touchY = touch.clientY - rect.top;
+            const scaledX = toTrueX(touchX);
+            const scaledY = toTrueY(touchY);
+            const prevTouch = prevTouches[0];
+            const prevTouchX = prevTouch.clientX - rect.left;
+            const prevTouchY = prevTouch.clientY - rect.top;
+            const prevScaledX = toTrueX(prevTouchX);
+            const prevScaledY = toTrueY(prevTouchY);
+            if (eraserMode) {
+                for (let i = drawings.length - 1; i >= 0; i--) {
+                    let d = drawings[i];
+                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                        drawings.splice(i, 1);
+                    }
+                }
+                redrawCanvas();
+            } else {
+                drawings.push({
+                    x0: prevScaledX,
+                    y0: prevScaledY,
+                    x1: scaledX,
+                    y1: scaledY,
+                    color: brushColor,
+                    size: brushSize
+                });
+                drawLine(prevTouchX, prevTouchY, touchX, touchY, brushColor, brushSize);
+            }
+            prevTouches[0] = touch;
+        } else if (event.touches.length === 2) {
+            event.preventDefault(); // Prevent default browser gestures
+            const touch1 = event.touches[0];
+            const touch2 = event.touches[1];
+            const currentTouch1 = { x: touch1.clientX - rect.left, y: touch1.clientY - rect.top };
+            const currentTouch2 = { x: touch2.clientX - rect.left, y: touch2.clientY - rect.top };
+            const prevTouch1 = { x: prevTouches[0].clientX - rect.left, y: prevTouches[0].clientY - rect.top };
+            const prevTouch2 = { x: prevTouches[1].clientX - rect.left, y: prevTouches[1].clientY - rect.top };
+            const currentDist = Math.hypot(currentTouch2.x - currentTouch1.x, currentTouch2.y - currentTouch1.y);
+            const prevDist = Math.hypot(prevTouch2.x - prevTouch1.x, prevTouch2.y - prevTouch1.y);
+            const distanceDiff = currentDist - prevDist;
+            const zoomFactor = 1 + (distanceDiff / 200); // Adjust sensitivity
+            scale *= zoomFactor;
+            // Calculate midpoint differences for panning
+            const currentMidX = (currentTouch1.x + currentTouch2.x) / 2;
+            const currentMidY = (currentTouch1.y + currentTouch2.y) / 2;
+            const prevMidX = (prevTouch1.x + prevTouch2.x) / 2;
+            const prevMidY = (prevTouch1.y + prevTouch2.y) / 2;
+            const deltaX = currentMidX - prevMidX;
+            const deltaY = currentMidY - prevMidY;
             offsetX -= deltaX / scale;
             offsetY -= deltaY / scale;
+            prevTouches[0] = touch1;
+            prevTouches[1] = touch2;
+            redrawCanvas();
         }
-
-        prevTouches[0] = touch1;
-        prevTouches[1] = touch2;
-        redrawCanvas();
-    }
-});
-
-
-    canvas.addEventListener('touchend', () => {
-        singleTouch = false;
-        doubleTouch = false;
+    });
+    canvas.addEventListener('touchend', (event) => {
+        if (event.touches.length === 0) {
+            singleTouch = false;
+            doubleTouch = false;
+        } else if (event.touches.length === 1) {
+            singleTouch = true;
+            doubleTouch = false;
+            prevTouches[0] = event.touches[0];
+        }
     });
 }
 
