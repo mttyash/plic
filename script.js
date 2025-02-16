@@ -1001,44 +1001,69 @@ function renderWhiteboardChannel(container, channel) {
     });
 
     canvas.addEventListener('touchmove', (event) => {
-        event.preventDefault(); // Prevents scrolling while drawing
+    if (event.touches.length === 1) {
+        // Single-finger touch (drawing or erasing)
+        event.preventDefault(); // Prevents page scrolling
 
-        const touch0X = event.touches[0].clientX - canvas.getBoundingClientRect().left;
-        const touch0Y = event.touches[0].clientY - canvas.getBoundingClientRect().top;
-        const prevTouch0X = prevTouches[0].clientX - canvas.getBoundingClientRect().left;
-        const prevTouch0Y = prevTouches[0].clientY - canvas.getBoundingClientRect().top;
+        const touch = event.touches[0];
+        const touchX = touch.clientX - canvas.getBoundingClientRect().left;
+        const touchY = touch.clientY - canvas.getBoundingClientRect().top;
 
-        const scaledX = toTrueX(touch0X);
-        const scaledY = toTrueY(touch0Y);
-        const prevScaledX = toTrueX(prevTouch0X);
-        const prevScaledY = toTrueY(prevTouch0Y);
+        const scaledX = toTrueX(touchX);
+        const scaledY = toTrueY(touchY);
+        const prevScaledX = toTrueX(prevTouches[0].clientX - canvas.getBoundingClientRect().left);
+        const prevScaledY = toTrueY(prevTouches[0].clientY - canvas.getBoundingClientRect().top);
 
-        if (singleTouch) {
-            if (eraserMode) {
-                // Erase strokes that are touched
-                for (let i = drawings.length - 1; i >= 0; i--) {
-                    let d = drawings[i];
-                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
-                        drawings.splice(i, 1);
-                    }
+        if (eraserMode) {
+            for (let i = drawings.length - 1; i >= 0; i--) {
+                let d = drawings[i];
+                if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                    drawings.splice(i, 1);
                 }
-                window.whiteboardData[channel] = drawings;
-                redrawCanvas();
-            } else {
-                drawings.push({
-                    x0: prevScaledX,
-                    y0: prevScaledY,
-                    x1: scaledX,
-                    y1: scaledY,
-                    color: brushColor,
-                    size: brushSize
-                });
-                drawLine(prevTouch0X, prevTouch0Y, touch0X, touch0Y, brushColor, brushSize);
             }
+            redrawCanvas();
+        } else {
+            drawings.push({ x0: prevScaledX, y0: prevScaledY, x1: scaledX, y1: scaledY, color: brushColor, size: brushSize });
+            drawLine(prevTouches[0].clientX, prevTouches[0].clientY, touch.clientX, touch.clientY, brushColor, brushSize);
         }
 
         prevTouches[0] = event.touches[0];
-    });
+
+    } else if (event.touches.length === 2) {
+        // Two-finger touch (panning & zooming)
+        event.preventDefault(); // Prevents weird browser gestures
+
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+
+        const newDist = Math.hypot(
+            touch2.clientX - touch1.clientX,
+            touch2.clientY - touch1.clientY
+        );
+
+        if (prevTouches[1]) {
+            const prevDist = Math.hypot(
+                prevTouches[1].clientX - prevTouches[0].clientX,
+                prevTouches[1].clientY - prevTouches[0].clientY
+            );
+
+            const scaleAmount = (newDist - prevDist) / 200; // Adjust zoom sensitivity
+            scale *= (1 + scaleAmount);
+
+            // Panning
+            const deltaX = (touch1.clientX + touch2.clientX) / 2 - (prevTouches[0].clientX + prevTouches[1].clientX) / 2;
+            const deltaY = (touch1.clientY + touch2.clientY) / 2 - (prevTouches[0].clientY + prevTouches[1].clientY) / 2;
+
+            offsetX -= deltaX / scale;
+            offsetY -= deltaY / scale;
+        }
+
+        prevTouches[0] = touch1;
+        prevTouches[1] = touch2;
+        redrawCanvas();
+    }
+});
+
 
     canvas.addEventListener('touchend', () => {
         singleTouch = false;
