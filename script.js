@@ -2,7 +2,7 @@
  * Data & Initialization
  ***********************/
 const categories = [{
-        name: "General v1.8",
+        name: "General",
         channels: [{
                 id: "text1",
                 name: "General Chat",
@@ -51,31 +51,73 @@ if (!window.codeData)
 function renderSidebar() {
     const sidebar = document.querySelector(".sidebar");
     sidebar.innerHTML = "";
+
+    // Collapse button
     const collapseBtn = document.createElement("button");
     collapseBtn.textContent = "▶";
     collapseBtn.classList.add("collapse-btn");
     collapseBtn.addEventListener("click", () => sidebar.classList.toggle("collapsed"));
     sidebar.appendChild(collapseBtn);
+
+    // Category rendering
     categories.forEach(category => {
         const catTitle = document.createElement("h2");
         catTitle.textContent = category.name;
         sidebar.appendChild(catTitle);
+
         const ul = document.createElement("ul");
         ul.classList.add("channel-list");
+
         category.channels.forEach(channel => {
             const li = document.createElement("li");
             li.textContent = channel.name;
             li.classList.add("channel-item");
             li.dataset.channelId = channel.id;
             li.dataset.channelType = channel.type;
-            li.addEventListener("click", () => selectChannel(channel));
+
+            if (channel.type === "function") {
+                // When clicking a saved function, switch to the Code Runner channel and load its code.
+                li.addEventListener("click", () => {
+                    // Find the Code Runner channel (assumes its type is "code")
+                    const codeChannel = categories
+                        .flatMap(cat => cat.channels)
+                        .find(ch => ch.type === "code");
+                    if (codeChannel) {
+                        window.codeData[codeChannel.id] = channel.code;
+                        selectChannel(codeChannel);
+                    }
+                });
+                // Add a delete button next to the saved function
+                const deleteBtn = document.createElement("button");
+                deleteBtn.textContent = "Delete";
+                deleteBtn.style.marginLeft = "10px";
+                deleteBtn.addEventListener("click", (e) => {
+                    e.stopPropagation(); // Prevent the parent li click event
+                    const functionsCategory = categories.find(cat => cat.name === "Functions");
+                    if (functionsCategory) {
+                        // Filter out only the function with the matching unique id
+                        functionsCategory.channels = functionsCategory.channels.filter(ch => ch.id !== channel.id);
+                        renderSidebar();
+                    }
+                });
+                li.appendChild(deleteBtn);
+            } else {
+                li.addEventListener("click", () => selectChannel(channel));
+            }
             ul.appendChild(li);
         });
         sidebar.appendChild(ul);
     });
+
+    // Version text
+    const versionText = document.createElement("div");
+    versionText.classList.add("version-text");
+    versionText.textContent = "v1.10";
+    sidebar.appendChild(versionText);
+
+    // Collapse sidebar when clicking outside
     if (!window.sidebarOutsideListenerAdded) {
         const collapseSidebar = (event) => {
-            // If the click/touch is not inside the sidebar element, collapse it.
             if (sidebar && !sidebar.contains(event.target)) {
                 sidebar.classList.add("collapsed");
             }
@@ -508,6 +550,64 @@ function renderFlashcardChannel(container, channel) {
     startTestBtn.textContent = "Start Test";
     creationDiv.appendChild(startTestBtn);
 
+    // --- Export Flashcards Button ---
+    const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
+    exportBtn.textContent = "Export Flashcards";
+    exportBtn.addEventListener("click", () => {
+        const data = flashcards[channel.id] || [];
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], {
+            type: "application/json"
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "flashcards.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+    creationDiv.appendChild(exportBtn);
+
+    // --- Import Flashcards Button ---
+    // Create a hidden file input for JSON files.
+    const importInput = document.createElement("input");
+    importInput.type = "file";
+    importInput.accept = "application/json";
+    importInput.style.display = "none";
+    importInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file)
+            return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                if (Array.isArray(importedData)) {
+                    flashcards[channel.id] = importedData;
+                    renderFlashcardsList();
+                    // Successfully imported, no alert.
+                } else {
+                    // Invalid format, no alert.
+                }
+            } catch (err) {
+                // Error parsing JSON, no alert.
+            }
+        };
+        reader.readAsText(file);
+    });
+    creationDiv.appendChild(importInput);
+
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.textContent = "Import Flashcards";
+    importBtn.addEventListener("click", () => {
+        importInput.click();
+    });
+    creationDiv.appendChild(importBtn);
+
     const flashcardListDiv = document.createElement("div");
     creationDiv.appendChild(flashcardListDiv);
 
@@ -742,6 +842,7 @@ function renderFlashcardChannel(container, channel) {
                     }
                     input.disabled = true;
                 });
+                submitTestBtn.disabled = true;
             });
 
             resultDiv.textContent = `Your score: ${score} / ${flashcardsArr.length}`;
@@ -776,14 +877,32 @@ function renderWhiteboardChannel(container, channel) {
     const sizeSlider = document.createElement("input");
     sizeSlider.type = "range";
     sizeSlider.min = "1";
-    sizeSlider.max = "10";
-    sizeSlider.value = "2";
+    sizeSlider.max = "20";
+    sizeSlider.value = "1";
     toolbar.appendChild(sizeSlider);
 
     // Eraser Button
     const eraserButton = document.createElement("button");
     eraserButton.textContent = "Eraser";
     toolbar.appendChild(eraserButton);
+
+    // --- New Buttons for Pan and Zoom ---
+    // Pan Mode Button
+    const panModeButton = document.createElement("button");
+    panModeButton.textContent = "Pan Mode";
+    panModeButton.style.backgroundColor = "";
+    toolbar.appendChild(panModeButton);
+
+    // Zoom In Button
+    const zoomInButton = document.createElement("button");
+    zoomInButton.textContent = "Zoom In";
+    toolbar.appendChild(zoomInButton);
+
+    // Zoom Out Button
+    const zoomOutButton = document.createElement("button");
+    zoomOutButton.textContent = "Zoom Out";
+    toolbar.appendChild(zoomOutButton);
+    // --- End New Buttons ---
 
     container.appendChild(toolbar);
 
@@ -793,7 +912,9 @@ function renderWhiteboardChannel(container, channel) {
     const context = canvas.getContext("2d");
 
     // Disable right-clicking
-    document.oncontextmenu = function () { return false; }
+    document.oncontextmenu = function () {
+        return false;
+    }
 
     // Load saved drawings for the channel
     if (!window.whiteboardData[channel]) {
@@ -801,117 +922,231 @@ function renderWhiteboardChannel(container, channel) {
     }
     const drawings = window.whiteboardData[channel];
 
-    // Cursor position
-    let cursorX, cursorY, prevCursorX, prevCursorY;
+    // Load persistent pan/zoom data for the channel.
+    if (!window.whiteboardPanZoomData) {
+        window.whiteboardPanZoomData = {};
+    }
+    if (!window.whiteboardPanZoomData[channel]) {
+        window.whiteboardPanZoomData[channel] = {
+            offsetX: 0,
+            offsetY: 0,
+            scale: 1
+        };
+    }
+    let {
+        offsetX,
+        offsetY,
+        scale
+    } = window.whiteboardPanZoomData[channel];
 
-    // Offset and zoom
-    let offsetX = 0, offsetY = 0, scale = 1;
+    // Cursor position
+    let cursorX,
+    cursorY,
+    prevCursorX,
+    prevCursorY;
 
     // Brush settings
     let brushColor = "#000000";
-    let brushSize = 2;
+    let brushSize = 1;
     let eraserMode = false;
+
+    // Track Pan Mode state (for left-mouse panning)
+    let panMode = false;
 
     // Event listeners for controls
     colorPicker.addEventListener("input", () => {
         brushColor = colorPicker.value;
         eraserMode = false;
     });
+
     sizeSlider.addEventListener("input", () => {
         brushSize = parseInt(sizeSlider.value, 10);
     });
+
     eraserButton.addEventListener("click", () => {
         eraserMode = !eraserMode;
         eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : "";
     });
 
-    // Coordinate conversion functions
-    function toScreenX(xTrue) { return (xTrue + offsetX) * scale; }
-    function toScreenY(yTrue) { return (yTrue + offsetY) * scale; }
-    function toTrueX(xScreen) { return (xScreen / scale) - offsetX; }
-    function toTrueY(yScreen) { return (yScreen / scale) - offsetY; }
-    function trueWidth() { return canvas.clientWidth / scale; }
-    function trueHeight() { return canvas.clientHeight / scale; }
+    // Pan Mode toggle button
+    panModeButton.addEventListener("click", () => {
+        panMode = !panMode;
+        panModeButton.style.backgroundColor = panMode ? "#cccccc" : "";
+    });
+
+    // Zoom In button (zooming centered on canvas center)
+    zoomInButton.addEventListener("click", () => {
+        const factor = 1.1;
+        const newScale = scale * factor;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        // Adjust offsets so that the true coordinate at the canvas center remains unchanged.
+        offsetX = offsetX + cx * (1 / newScale - 1 / scale);
+        offsetY = offsetY + cy * (1 / newScale - 1 / scale);
+        scale = newScale;
+        redrawCanvas();
+        window.whiteboardPanZoomData[channel] = {
+            offsetX,
+            offsetY,
+            scale
+        };
+    });
+
+    // Zoom Out button (zooming centered on canvas center)
+    zoomOutButton.addEventListener("click", () => {
+        const factor = 1.1;
+        const newScale = scale / factor;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        offsetX = offsetX + cx * (1 / newScale - 1 / scale);
+        offsetY = offsetY + cy * (1 / newScale - 1 / scale);
+        scale = newScale;
+        redrawCanvas();
+        window.whiteboardPanZoomData[channel] = {
+            offsetX,
+            offsetY,
+            scale
+        };
+    });
+
+    // Convert coordinates
+    function toScreenX(xTrue) {
+        return (xTrue + offsetX) * scale;
+    }
+    function toScreenY(yTrue) {
+        return (yTrue + offsetY) * scale;
+    }
+    function toTrueX(xScreen) {
+        return (xScreen / scale) - offsetX;
+    }
+    function toTrueY(yScreen) {
+        return (yScreen / scale) - offsetY;
+    }
+
+    function trueWidth() {
+        return canvas.clientWidth / scale;
+    }
+    function trueHeight() {
+        return canvas.clientHeight / scale;
+    }
 
     function redrawCanvas() {
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
+
         context.fillStyle = '#fff';
         context.fillRect(0, 0, canvas.width, canvas.height);
+
         for (let i = 0; i < drawings.length; i++) {
             const line = drawings[i];
-            drawLine(toScreenX(line.x0), toScreenY(line.y0),
-                     toScreenX(line.x1), toScreenY(line.y1),
-                     line.color, line.size);
+            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
         }
     }
     redrawCanvas();
+
     window.addEventListener("resize", () => redrawCanvas());
 
-    // --- Mouse Events ---
-    let leftMouseDown = false, rightMouseDown = false;
+    // Mouse Events
+    let leftMouseDown = false,
+    rightMouseDown = false;
+
     canvas.addEventListener('mousedown', (event) => {
-        if (event.button === 0) leftMouseDown = true;
-        if (event.button === 2) rightMouseDown = true;
+        if (event.button === 0)
+            leftMouseDown = true;
+        if (event.button === 2)
+            rightMouseDown = true;
         cursorX = prevCursorX = event.offsetX;
         cursorY = prevCursorY = event.offsetY;
     });
+
     canvas.addEventListener('mousemove', (event) => {
         cursorX = event.offsetX;
         cursorY = event.offsetY;
-        const scaledX = toTrueX(cursorX);
-        const scaledY = toTrueY(cursorY);
-        const prevScaledX = toTrueX(prevCursorX);
-        const prevScaledY = toTrueY(prevCursorY);
 
         if (leftMouseDown) {
-            if (eraserMode) {
-                // Erase strokes near the current mouse position
-                for (let i = drawings.length - 1; i >= 0; i--) {
-                    let d = drawings[i];
-                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
-                        drawings.splice(i, 1);
-                    }
-                }
-                window.whiteboardData[channel] = drawings;
+            if (panMode) {
+                // Left-drag panning when Pan Mode is active
+                offsetX += (cursorX - prevCursorX) / scale;
+                offsetY += (cursorY - prevCursorY) / scale;
                 redrawCanvas();
-            } else {
-                const newLine = {
-                    x0: prevScaledX,
-                    y0: prevScaledY,
-                    x1: scaledX,
-                    y1: scaledY,
-                    color: brushColor,
-                    size: brushSize
+                window.whiteboardPanZoomData[channel] = {
+                    offsetX,
+                    offsetY,
+                    scale
                 };
-                drawings.push(newLine);
-                window.whiteboardData[channel] = drawings;
-                drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
+            } else {
+                // Drawing/erasing when Pan Mode is off
+                const scaledX = toTrueX(cursorX);
+                const scaledY = toTrueY(cursorY);
+                const prevScaledX = toTrueX(prevCursorX);
+                const prevScaledY = toTrueY(prevCursorY);
+
+                if (eraserMode) {
+                    // Eraser: remove strokes near the current true coordinate
+                    for (let i = drawings.length - 1; i >= 0; i--) {
+                        let d = drawings[i];
+                        if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                            drawings.splice(i, 1);
+                        }
+                    }
+                    window.whiteboardData[channel] = drawings;
+                    redrawCanvas();
+                } else {
+                    const newLine = {
+                        x0: prevScaledX,
+                        y0: prevScaledY,
+                        x1: scaledX,
+                        y1: scaledY,
+                        color: brushColor,
+                        size: brushSize
+                    };
+                    drawings.push(newLine);
+                    window.whiteboardData[channel] = drawings;
+                    drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
+                }
             }
         }
+
         if (rightMouseDown) {
+            // Right-drag panning (always available)
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
+            window.whiteboardPanZoomData[channel] = {
+                offsetX,
+                offsetY,
+                scale
+            };
         }
+
         prevCursorX = cursorX;
         prevCursorY = cursorY;
     });
+
     canvas.addEventListener('mouseup', () => {
         leftMouseDown = false;
         rightMouseDown = false;
     });
+
     canvas.addEventListener('wheel', (event) => {
         const deltaY = event.deltaY;
         const scaleAmount = -deltaY / 500;
         scale *= (1 + scaleAmount);
+
         const distX = event.offsetX / canvas.width;
         const distY = event.offsetY / canvas.height;
         const unitsZoomedX = trueWidth() * scaleAmount;
         const unitsZoomedY = trueHeight() * scaleAmount;
+
         offsetX -= unitsZoomedX * distX;
         offsetY -= unitsZoomedY * distY;
         redrawCanvas();
+        // Persist pan/zoom state
+        window.whiteboardPanZoomData[channel] = {
+            offsetX,
+            offsetY,
+            scale
+        };
     });
 
     function drawLine(x0, y0, x1, y1, color, size) {
@@ -923,50 +1158,66 @@ function renderWhiteboardChannel(container, channel) {
         context.lineCap = "round";
         context.stroke();
     }
+
     function isNearLine(x0, y0, x1, y1, px, py, threshold) {
-        const A = px - x0, B = py - y0;
-        const C = x1 - x0, D = y1 - y0;
+        const A = px - x0;
+        const B = py - y0;
+        const C = x1 - x0;
+        const D = y1 - y0;
+
         const dot = A * C + B * D;
         const lenSq = C * C + D * D;
         let param = lenSq !== 0 ? dot / lenSq : -1;
-        let nearestX, nearestY;
-        if (param < 0) { nearestX = x0; nearestY = y0; }
-        else if (param > 1) { nearestX = x1; nearestY = y1; }
-        else { nearestX = x0 + param * C; nearestY = y0 + param * D; }
-        return Math.hypot(px - nearestX, py - nearestY) <= threshold;
+
+        let nearestX,
+        nearestY;
+        if (param < 0) {
+            nearestX = x0;
+            nearestY = y0;
+        } else if (param > 1) {
+            nearestX = x1;
+            nearestY = y1;
+        } else {
+            nearestX = x0 + param * C;
+            nearestY = y0 + param * D;
+        }
+
+        const dist = Math.hypot(px - nearestX, py - nearestY);
+        return dist <= threshold;
     }
 
-    // --- Touch Events ---
+    // Touch Events
     const prevTouches = [null, null];
-    let singleTouch = false, doubleTouch = false;
+    let singleTouch = false,
+    doubleTouch = false;
+
     canvas.addEventListener('touchstart', (event) => {
-        if (event.touches.length === 1) {
+        if (event.touches.length === 1)
             singleTouch = true;
-            doubleTouch = false;
-        }
-        if (event.touches.length >= 2) {
-            singleTouch = false;
+        if (event.touches.length >= 2)
             doubleTouch = true;
-        }
         prevTouches[0] = event.touches[0];
         if (event.touches.length > 1) {
             prevTouches[1] = event.touches[1];
         }
     });
+
     canvas.addEventListener('touchmove', (event) => {
+        event.preventDefault(); // Prevent scrolling while drawing or gesturing
         const rect = canvas.getBoundingClientRect();
+
         if (event.touches.length === 1) {
-            event.preventDefault(); // Prevent scrolling
+            // Single-finger touch (drawing/erasing)
             const touch = event.touches[0];
             const touchX = touch.clientX - rect.left;
             const touchY = touch.clientY - rect.top;
             const scaledX = toTrueX(touchX);
             const scaledY = toTrueY(touchY);
-            const prevTouch = prevTouches[0];
-            const prevTouchX = prevTouch.clientX - rect.left;
-            const prevTouchY = prevTouch.clientY - rect.top;
+            const prevTouchX = prevTouches[0].clientX - rect.left;
+            const prevTouchY = prevTouches[0].clientY - rect.top;
             const prevScaledX = toTrueX(prevTouchX);
             const prevScaledY = toTrueY(prevTouchY);
+
             if (eraserMode) {
                 for (let i = drawings.length - 1; i >= 0; i--) {
                     let d = drawings[i];
@@ -974,6 +1225,7 @@ function renderWhiteboardChannel(container, channel) {
                         drawings.splice(i, 1);
                     }
                 }
+                window.whiteboardData[channel] = drawings;
                 redrawCanvas();
             } else {
                 drawings.push({
@@ -985,22 +1237,38 @@ function renderWhiteboardChannel(container, channel) {
                     size: brushSize
                 });
                 drawLine(prevTouchX, prevTouchY, touchX, touchY, brushColor, brushSize);
+                window.whiteboardData[channel] = drawings;
             }
             prevTouches[0] = touch;
         } else if (event.touches.length === 2) {
-            event.preventDefault(); // Prevent default browser gestures
+            // Two-finger touch (panning and zooming)
             const touch1 = event.touches[0];
             const touch2 = event.touches[1];
-            const currentTouch1 = { x: touch1.clientX - rect.left, y: touch1.clientY - rect.top };
-            const currentTouch2 = { x: touch2.clientX - rect.left, y: touch2.clientY - rect.top };
-            const prevTouch1 = { x: prevTouches[0].clientX - rect.left, y: prevTouches[0].clientY - rect.top };
-            const prevTouch2 = { x: prevTouches[1].clientX - rect.left, y: prevTouches[1].clientY - rect.top };
+            const currentTouch1 = {
+                x: touch1.clientX - rect.left,
+                y: touch1.clientY - rect.top
+            };
+            const currentTouch2 = {
+                x: touch2.clientX - rect.left,
+                y: touch2.clientY - rect.top
+            };
+
+            const prevTouch1 = {
+                x: prevTouches[0].clientX - rect.left,
+                y: prevTouches[0].clientY - rect.top
+            };
+            const prevTouch2 = {
+                x: prevTouches[1].clientX - rect.left,
+                y: prevTouches[1].clientY - rect.top
+            };
+
             const currentDist = Math.hypot(currentTouch2.x - currentTouch1.x, currentTouch2.y - currentTouch1.y);
             const prevDist = Math.hypot(prevTouch2.x - prevTouch1.x, prevTouch2.y - prevTouch1.y);
             const distanceDiff = currentDist - prevDist;
             const zoomFactor = 1 + (distanceDiff / 200); // Adjust sensitivity
             scale *= zoomFactor;
-            // Calculate midpoint differences for panning
+
+            // Panning based on the midpoint movement
             const currentMidX = (currentTouch1.x + currentTouch2.x) / 2;
             const currentMidY = (currentTouch1.y + currentTouch2.y) / 2;
             const prevMidX = (prevTouch1.x + prevTouch2.x) / 2;
@@ -1009,11 +1277,18 @@ function renderWhiteboardChannel(container, channel) {
             const deltaY = currentMidY - prevMidY;
             offsetX -= deltaX / scale;
             offsetY -= deltaY / scale;
+
             prevTouches[0] = touch1;
             prevTouches[1] = touch2;
             redrawCanvas();
+            window.whiteboardPanZoomData[channel] = {
+                offsetX,
+                offsetY,
+                scale
+            };
         }
     });
+
     canvas.addEventListener('touchend', (event) => {
         if (event.touches.length === 0) {
             singleTouch = false;
@@ -1030,16 +1305,52 @@ function renderWhiteboardChannel(container, channel) {
  * 4. Code Runner (Full code editor, non-resizable)
  ***********************/
 function renderCodeChannel(container, channel) {
+    // Create header container with title and Save button
+    const headerContainer = document.createElement("div");
+    headerContainer.style.display = "flex";
+    headerContainer.style.justifyContent = "space-between";
+    headerContainer.style.alignItems = "center";
+    
     const header = document.createElement("h2");
     header.textContent = "Code Runner";
-    container.appendChild(header);
+    headerContainer.appendChild(header);
+    
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "Save";
+    headerContainer.appendChild(saveBtn);
+    container.appendChild(headerContainer);
 
+    // Create Export and Import buttons container with an editable function name field anchored to the right
+    const ioContainer = document.createElement("div");
+    ioContainer.style.margin = "10px 0";
+    ioContainer.style.display = "flex";
+    ioContainer.style.alignItems = "center";
+    
+    const exportBtn = document.createElement("button");
+    exportBtn.textContent = "Export";
+    ioContainer.appendChild(exportBtn);
+    
+    const importBtn = document.createElement("button");
+    importBtn.textContent = "Import";
+    ioContainer.appendChild(importBtn);
+    
+    // Editable text field for function name, anchored to the right
+    const functionNameInput = document.createElement("input");
+    functionNameInput.type = "text";
+    functionNameInput.placeholder = "Function Name";
+    functionNameInput.style.marginLeft = "auto";
+    ioContainer.appendChild(functionNameInput);
+    
+    container.appendChild(ioContainer);
+
+    // Create code editor wrapper
     const wrapper = document.createElement("div");
     wrapper.classList.add("code-runner-wrapper");
     wrapper.style.height = "calc(100% - 40px)";
     wrapper.style.position = "relative";
     container.appendChild(wrapper);
 
+    // Run button and code area
     const runBtn = document.createElement("button");
     runBtn.textContent = "Run Code";
     runBtn.classList.add("run-btn");
@@ -1050,33 +1361,167 @@ function renderCodeChannel(container, channel) {
     codeArea.style.boxSizing = "border-box";
     codeArea.style.resize = "none";
     wrapper.appendChild(codeArea);
+
+    // Initialize or load existing code
     if (window.codeData[channel.id]) {
         codeArea.value = window.codeData[channel.id];
     }
+    
     codeArea.addEventListener("input", () => {
         window.codeData[channel.id] = codeArea.value;
     });
 
+    // Output div for code execution results
     const outputDiv = document.createElement("div");
     outputDiv.classList.add("code-runner-output");
     wrapper.appendChild(outputDiv);
 
+    // Code execution handler
     runBtn.addEventListener("click", () => {
         const code = codeArea.value;
         const logs = [];
         const originalConsoleLog = console.log;
+        
         console.log = function (...args) {
             logs.push(args.join(" "));
             originalConsoleLog.apply(console, args);
         };
+        
         try {
             const result = eval(code);
-            let outputText = logs.length > 0 ? logs.join("\n") : (result !== undefined ? result : "Code executed successfully.");
+            let outputText = logs.length > 0 
+                ? logs.join("\n") 
+                : (result !== undefined ? result : "Code executed successfully.");
             outputDiv.textContent = outputText;
         } catch (error) {
             outputDiv.textContent = "Error: " + error;
         }
         console.log = originalConsoleLog;
+    });
+
+    // When the function name input changes, update the save button text if a function with that name exists.
+    functionNameInput.addEventListener("input", () => {
+        let functionsCategory = categories.find(cat => cat.name === "Functions");
+        if (functionsCategory) {
+            const existingFunction = functionsCategory.channels.find(ch => 
+                ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase()
+            );
+            saveBtn.textContent = existingFunction ? "Update" : "Save";
+        } else {
+            saveBtn.textContent = "Save";
+        }
+    });
+
+    // Save/Update functionality
+    saveBtn.addEventListener("click", () => {
+        const code = codeArea.value;
+        if (!code.trim()) {
+            // Do not save empty code.
+            return;
+        }
+
+        // Ensure Functions category exists
+        let functionsCategory = categories.find(cat => cat.name === "Functions");
+        if (!functionsCategory) {
+            functionsCategory = { name: "Functions", channels: [] };
+            categories.push(functionsCategory);
+        }
+
+        let enteredName = functionNameInput.value.trim();
+        if (enteredName === "") {
+            // Default name if none provided.
+            enteredName = "Saved Function " + (functionsCategory.channels.length + 1);
+        }
+
+        // Check if a function with that name already exists (case-insensitive)
+        const existingIndex = functionsCategory.channels.findIndex(ch => 
+            ch.name.toLowerCase() === enteredName.toLowerCase()
+        );
+        if (existingIndex !== -1) {
+            // Update existing function
+            functionsCategory.channels[existingIndex].code = code;
+        } else {
+            // Create new function entry with a unique id
+            const funcId = "func_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+            const newFuncChannel = {
+                id: funcId,
+                name: enteredName,
+                type: "function",
+                code: code
+            };
+            functionsCategory.channels.push(newFuncChannel);
+        }
+        renderSidebar();
+        // Clear the function name input and reset save button text
+        functionNameInput.value = "";
+        saveBtn.textContent = "Save";
+    });
+
+    // Export functionality
+    exportBtn.addEventListener("click", () => {
+        let functionsCategory = categories.find(cat => cat.name === "Functions");
+        if (!functionsCategory?.channels?.length) {
+            return;
+        }
+
+        const data = functionsCategory.channels;
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "code_functions.json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+
+    // Import functionality (replace by name)
+    importBtn.addEventListener("click", () => {
+        const importInput = document.createElement("input");
+        importInput.type = "file";
+        importInput.accept = "application/json";
+        importInput.style.display = "none";
+        
+        importInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (!Array.isArray(importedData)) {
+                        return;
+                    }
+
+                    let functionsCategory = categories.find(cat => cat.name === "Functions");
+                    if (!functionsCategory) {
+                        functionsCategory = { name: "Functions", channels: [] };
+                        categories.push(functionsCategory);
+                    }
+
+                    // For each imported function, replace an existing one with the same name (case-insensitive) or add new
+                    importedData.forEach(importedFunc => {
+                        const existingIndex = functionsCategory.channels.findIndex(ch =>
+                            ch.name.toLowerCase() === importedFunc.name.toLowerCase()
+                        );
+                        if (existingIndex !== -1) {
+                            functionsCategory.channels[existingIndex] = importedFunc;
+                        } else {
+                            functionsCategory.channels.push(importedFunc);
+                        }
+                    });
+                    renderSidebar();
+                } catch (err) {
+                    // Handle errors if needed
+                }
+            };
+            reader.readAsText(file);
+        });
+        importInput.click();
     });
 }
 
