@@ -154,15 +154,6 @@ padding: 10px;
 margin-bottom: 10px;
 }
 
-.chat-footer {
-display: flex;
-gap: 5px;
-}
-
-.chat-footer input[type="text"] {
-flex: 1;
-}
-
 .message-container {
 position: relative;
 border: 1px solid var(--color-border-light);
@@ -176,24 +167,12 @@ color: var(--color-text-muted);
 margin-bottom: 3px;
 }
 
-.message-buttons {
-position: absolute;
-top: 5px;
-right: 5px;
-}
-
 .flashcard {
 position: relative;
 border: 1px solid var(--color-border-light);
 padding: 10px;
 margin-bottom: 10px;
 background: var(--color-white);
-}
-
-.flashcard-buttons {
-position: absolute;
-top: 5px;
-right: 5px;
 }
 
 .answer-row {
@@ -254,4 +233,24 @@ border: 1px solid var(--color-border-light);
 padding: 10px;
 background: var(--color-white);
 margin-bottom: 10px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 5px; /* Reduce gap for better fitting */
+  flex-wrap: wrap; /* Allow wrapping */
+  justify-content: flex-start; /* Align items properly */
+}
+
+.toolbar button {
+  white-space: nowrap; /* Prevent text from wrapping within buttons */
+  padding: 2px 4px; /* Minimal padding for compact layout */
+  min-width: auto; /* Allow buttons to shrink if needed */
+  flex: 0 1 auto; /* Prevent stretching, but allow shrinking */
+}
+
+@media (max-width: 600px) {
+  .toolbar {
+    justify-content: flex-start; /* Center buttons on small screens */
+  }
 }

@@ -112,7 +112,7 @@ function renderSidebar() {
     // Version text
     const versionText = document.createElement("div");
     versionText.classList.add("version-text");
-    versionText.textContent = "v1.10";
+    versionText.textContent = "v1.11";
     sidebar.appendChild(versionText);
 
     // Collapse sidebar when clicking outside
@@ -274,7 +274,7 @@ function renderTextChannel(container, channel) {
             msgContainer.appendChild(contentDiv);
 
             const btnContainer = document.createElement("div");
-            btnContainer.classList.add("message-buttons");
+			btnContainer.classList.add("toolbar");
             const editBtn = document.createElement("button");
             editBtn.textContent = "Edit";
             const removeBtn = document.createElement("button");
@@ -377,10 +377,14 @@ function renderTextChannel(container, channel) {
     updateMessages();
 
     const footerDiv = document.createElement("div");
-    footerDiv.classList.add("chat-footer");
+	footerDiv.classList.add("toolbar");
     const textInput = document.createElement("input");
     textInput.type = "text";
     textInput.placeholder = "Type a message...";
+	textInput.style.flex = "1";
+	textInput.style.minWidth = "100px";
+	textInput.style.maxWidth = "calc(100% - 120px)";
+
     footerDiv.appendChild(textInput);
     const attachBtn = document.createElement("button");
     attachBtn.textContent = "Attach File";
@@ -510,9 +514,12 @@ function renderFlashcardChannel(container, channel) {
         row.classList.add("answer-row");
         const answerInput = document.createElement("input");
         answerInput.type = "text";
-        answerInput.placeholder = "Answer";
-        answerInput.required = true;
-        answerInput.value = defaultText;
+		answerInput.placeholder = "Answer";
+		answerInput.required = true;
+		answerInput.value = defaultText;
+		answerInput.style.flex = "1";
+		answerInput.style.minWidth = "80px";
+		answerInput.style.maxWidth = "calc(100% - 120px)";
         row.appendChild(answerInput);
         const correctToggle = document.createElement("input");
         correctToggle.type = "checkbox";
@@ -638,7 +645,7 @@ function renderFlashcardChannel(container, channel) {
             cardDiv.appendChild(answersList);
 
             const btnContainer = document.createElement("div");
-            btnContainer.classList.add("flashcard-buttons");
+			btnContainer.classList.add("toolbar");
 
             const editBtn = document.createElement("button");
             editBtn.textContent = "Edit";
@@ -862,10 +869,11 @@ function renderWhiteboardChannel(container, channel) {
     container.appendChild(header);
 
     // Create toolbar
-    const toolbar = document.createElement("div");
-    toolbar.style.display = "flex";
-    toolbar.style.gap = "10px";
-    toolbar.style.marginBottom = "10px";
+	const toolbar = document.createElement("div");
+	toolbar.classList.add("toolbar");
+	toolbar.style.display = "flex";
+	toolbar.style.gap = "10px";
+	toolbar.style.marginBottom = "10px";
 
     // Color Picker
     const colorPicker = document.createElement("input");
@@ -927,30 +935,19 @@ function renderWhiteboardChannel(container, channel) {
         window.whiteboardPanZoomData = {};
     }
     if (!window.whiteboardPanZoomData[channel]) {
-        window.whiteboardPanZoomData[channel] = {
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1
-        };
+        window.whiteboardPanZoomData[channel] = { offsetX: 0, offsetY: 0, scale: 1 };
     }
-    let {
-        offsetX,
-        offsetY,
-        scale
-    } = window.whiteboardPanZoomData[channel];
+    let { offsetX, offsetY, scale } = window.whiteboardPanZoomData[channel];
 
     // Cursor position
-    let cursorX,
-    cursorY,
-    prevCursorX,
-    prevCursorY;
+    let cursorX, cursorY, prevCursorX, prevCursorY;
 
     // Brush settings
     let brushColor = "#000000";
     let brushSize = 1;
     let eraserMode = false;
 
-    // Track Pan Mode state (for left-mouse panning)
+    // Track Pan Mode state (for left‑mouse/touch panning)
     let panMode = false;
 
     // Event listeners for controls
@@ -985,11 +982,7 @@ function renderWhiteboardChannel(container, channel) {
         offsetY = offsetY + cy * (1 / newScale - 1 / scale);
         scale = newScale;
         redrawCanvas();
-        window.whiteboardPanZoomData[channel] = {
-            offsetX,
-            offsetY,
-            scale
-        };
+        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
     });
 
     // Zoom Out button (zooming centered on canvas center)
@@ -1002,11 +995,7 @@ function renderWhiteboardChannel(container, channel) {
         offsetY = offsetY + cy * (1 / newScale - 1 / scale);
         scale = newScale;
         redrawCanvas();
-        window.whiteboardPanZoomData[channel] = {
-            offsetX,
-            offsetY,
-            scale
-        };
+        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
     });
 
     // Convert coordinates
@@ -1046,9 +1035,8 @@ function renderWhiteboardChannel(container, channel) {
 
     window.addEventListener("resize", () => redrawCanvas());
 
-    // Mouse Events
-    let leftMouseDown = false,
-    rightMouseDown = false;
+    // Mouse Events (desktop)
+    let leftMouseDown = false, rightMouseDown = false;
 
     canvas.addEventListener('mousedown', (event) => {
         if (event.button === 0)
@@ -1065,15 +1053,11 @@ function renderWhiteboardChannel(container, channel) {
 
         if (leftMouseDown) {
             if (panMode) {
-                // Left-drag panning when Pan Mode is active
+                // Left‑drag panning when Pan Mode is active
                 offsetX += (cursorX - prevCursorX) / scale;
                 offsetY += (cursorY - prevCursorY) / scale;
                 redrawCanvas();
-                window.whiteboardPanZoomData[channel] = {
-                    offsetX,
-                    offsetY,
-                    scale
-                };
+                window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
             } else {
                 // Drawing/erasing when Pan Mode is off
                 const scaledX = toTrueX(cursorX);
@@ -1108,15 +1092,11 @@ function renderWhiteboardChannel(container, channel) {
         }
 
         if (rightMouseDown) {
-            // Right-drag panning (always available)
+            // Right‑drag panning (always available)
             offsetX += (cursorX - prevCursorX) / scale;
             offsetY += (cursorY - prevCursorY) / scale;
             redrawCanvas();
-            window.whiteboardPanZoomData[channel] = {
-                offsetX,
-                offsetY,
-                scale
-            };
+            window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
         }
 
         prevCursorX = cursorX;
@@ -1142,11 +1122,7 @@ function renderWhiteboardChannel(container, channel) {
         offsetY -= unitsZoomedY * distY;
         redrawCanvas();
         // Persist pan/zoom state
-        window.whiteboardPanZoomData[channel] = {
-            offsetX,
-            offsetY,
-            scale
-        };
+        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
     });
 
     function drawLine(x0, y0, x1, y1, color, size) {
@@ -1169,8 +1145,7 @@ function renderWhiteboardChannel(container, channel) {
         const lenSq = C * C + D * D;
         let param = lenSq !== 0 ? dot / lenSq : -1;
 
-        let nearestX,
-        nearestY;
+        let nearestX, nearestY;
         if (param < 0) {
             nearestX = x0;
             nearestY = y0;
@@ -1186,35 +1161,46 @@ function renderWhiteboardChannel(container, channel) {
         return dist <= threshold;
     }
 
-    // Touch Events
-    const prevTouches = [null, null];
-    let singleTouch = false,
-    doubleTouch = false;
+    // --- Updated Touch Events for Mobile ---
+    // In mobile, only one-finger touch is used.
+    // When Pan Mode is active, one-finger moves pan the canvas.
+    // Otherwise, one-finger touch draws/erases.
+    const prevTouches = [null];
 
     canvas.addEventListener('touchstart', (event) => {
-        if (event.touches.length === 1)
-            singleTouch = true;
-        if (event.touches.length >= 2)
-            doubleTouch = true;
-        prevTouches[0] = event.touches[0];
-        if (event.touches.length > 1) {
-            prevTouches[1] = event.touches[1];
+        // Always store the first touch only; ignore extra touches.
+        if (event.touches.length > 0) {
+            prevTouches[0] = event.touches[0];
         }
     });
 
     canvas.addEventListener('touchmove', (event) => {
-        event.preventDefault(); // Prevent scrolling while drawing or gesturing
+        event.preventDefault(); // Prevent scrolling
         const rect = canvas.getBoundingClientRect();
+        // Ignore multi-touch gestures entirely.
+        if (event.touches.length !== 1) return;
 
-        if (event.touches.length === 1) {
-            // Single-finger touch (drawing/erasing)
-            const touch = event.touches[0];
-            const touchX = touch.clientX - rect.left;
-            const touchY = touch.clientY - rect.top;
+        const touch = event.touches[0];
+        const touchX = touch.clientX - rect.left;
+        const touchY = touch.clientY - rect.top;
+
+        if (panMode) {
+            // Pan mode: use one finger to pan the canvas.
+            const prevTouch = prevTouches[0];
+            const prevTouchX = prevTouch.clientX - rect.left;
+            const prevTouchY = prevTouch.clientY - rect.top;
+            offsetX += (touchX - prevTouchX) / scale;
+            offsetY += (touchY - prevTouchY) / scale;
+            redrawCanvas();
+            window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+            prevTouches[0] = touch;
+        } else {
+            // Drawing/erasing mode with one finger.
             const scaledX = toTrueX(touchX);
             const scaledY = toTrueY(touchY);
-            const prevTouchX = prevTouches[0].clientX - rect.left;
-            const prevTouchY = prevTouches[0].clientY - rect.top;
+            const prevTouch = prevTouches[0];
+            const prevTouchX = prevTouch.clientX - rect.left;
+            const prevTouchY = prevTouch.clientY - rect.top;
             const prevScaledX = toTrueX(prevTouchX);
             const prevScaledY = toTrueY(prevTouchY);
 
@@ -1240,65 +1226,15 @@ function renderWhiteboardChannel(container, channel) {
                 window.whiteboardData[channel] = drawings;
             }
             prevTouches[0] = touch;
-        } else if (event.touches.length === 2) {
-            // Two-finger touch (panning and zooming)
-            const touch1 = event.touches[0];
-            const touch2 = event.touches[1];
-            const currentTouch1 = {
-                x: touch1.clientX - rect.left,
-                y: touch1.clientY - rect.top
-            };
-            const currentTouch2 = {
-                x: touch2.clientX - rect.left,
-                y: touch2.clientY - rect.top
-            };
-
-            const prevTouch1 = {
-                x: prevTouches[0].clientX - rect.left,
-                y: prevTouches[0].clientY - rect.top
-            };
-            const prevTouch2 = {
-                x: prevTouches[1].clientX - rect.left,
-                y: prevTouches[1].clientY - rect.top
-            };
-
-            const currentDist = Math.hypot(currentTouch2.x - currentTouch1.x, currentTouch2.y - currentTouch1.y);
-            const prevDist = Math.hypot(prevTouch2.x - prevTouch1.x, prevTouch2.y - prevTouch1.y);
-            const distanceDiff = currentDist - prevDist;
-            const zoomFactor = 1 + (distanceDiff / 200); // Adjust sensitivity
-            scale *= zoomFactor;
-
-            // Panning based on the midpoint movement
-            const currentMidX = (currentTouch1.x + currentTouch2.x) / 2;
-            const currentMidY = (currentTouch1.y + currentTouch2.y) / 2;
-            const prevMidX = (prevTouch1.x + prevTouch2.x) / 2;
-            const prevMidY = (prevTouch1.y + prevTouch2.y) / 2;
-            const deltaX = currentMidX - prevMidX;
-            const deltaY = currentMidY - prevMidY;
-            offsetX -= deltaX / scale;
-            offsetY -= deltaY / scale;
-
-            prevTouches[0] = touch1;
-            prevTouches[1] = touch2;
-            redrawCanvas();
-            window.whiteboardPanZoomData[channel] = {
-                offsetX,
-                offsetY,
-                scale
-            };
         }
     });
 
     canvas.addEventListener('touchend', (event) => {
         if (event.touches.length === 0) {
-            singleTouch = false;
-            doubleTouch = false;
-        } else if (event.touches.length === 1) {
-            singleTouch = true;
-            doubleTouch = false;
-            prevTouches[0] = event.touches[0];
+            prevTouches[0] = null;
         }
     });
+    // --- End Updated Touch Events ---
 }
 
 /***********************
@@ -1322,6 +1258,7 @@ function renderCodeChannel(container, channel) {
 
     // Create Export and Import buttons container with an editable function name field anchored to the right
     const ioContainer = document.createElement("div");
+	ioContainer.classList.add("toolbar");
     ioContainer.style.margin = "10px 0";
     ioContainer.style.display = "flex";
     ioContainer.style.alignItems = "center";
@@ -1337,8 +1274,10 @@ function renderCodeChannel(container, channel) {
     // Editable text field for function name, anchored to the right
     const functionNameInput = document.createElement("input");
     functionNameInput.type = "text";
-    functionNameInput.placeholder = "Function Name";
-    functionNameInput.style.marginLeft = "auto";
+    functionNameInput.placeholder = "Function Name..";
+	functionNameInput.style.flex = "1"; // Expand as much as possible while leaving space for buttons
+	functionNameInput.style.minWidth = "80px"; // Prevent it from becoming too small
+	functionNameInput.style.maxWidth = "calc(100% - 120px)";
     ioContainer.appendChild(functionNameInput);
     
     container.appendChild(ioContainer);
