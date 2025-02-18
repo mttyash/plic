@@ -1,1684 +1,688 @@
-/***********************
- * Data & Initialization
- ***********************/
-const categories = [{
-        name: "General",
-        channels: [{
-                id: "text1",
-                name: "General Chat",
-                type: "text"
-            }
-        ]
-    }, {
-        name: "Learning",
-        channels: [{
-                id: "flashcard1",
-                name: "Flashcards",
-                type: "flashcard"
-            }, {
-                id: "whiteboard1",
-                name: "Whiteboard",
-                type: "whiteboard"
-            }, {
-                id: "code1",
-                name: "Code Runner",
-                type: "code"
-            }
-        ]
-    }, {
-        name: "Reminders",
-        channels: [{
-                id: "reminder1",
-                name: "My Reminders",
-                type: "reminder"
-            }
-        ]
+(() => {
+  // Helper to create elements with props and children.
+  const el = (tag, props = {}, ...children) => {
+    const e = document.createElement(tag);
+    for (let [k, v] of Object.entries(props)) {
+      if (k === 'class') e.className = v;
+      else if (k === 'style') Object.assign(e.style, v);
+      else if (k.startsWith('on') && typeof v === 'function')
+        e.addEventListener(k.slice(2).toLowerCase(), v);
+      else e[k] = v;
     }
-];
+    children.forEach(child => {
+      if (typeof child === 'string') e.appendChild(document.createTextNode(child));
+      else if (child) e.appendChild(child);
+    });
+    return e;
+  };
 
-// In-memory demo storage:
-const chatMessages = {}; // Each message will be an object: { date, text, files }
-const flashcards = {}; // Stored as objects: { question, answers: [ { text, correct } ] }
-const reminders = {}; // For reminders; each channel id key maps to an array of reminders
-if (!window.whiteboardData)
-    window.whiteboardData = {};
-if (!window.codeData)
-    window.codeData = {};
+  // Data & in‑memory storage
+  const categories = [
+    { name: "General", channels: [{ id: "text1", name: "General Chat", type: "text" }] },
+    { name: "Learning", channels: [
+        { id: "flashcard1", name: "Flashcards", type: "flashcard" },
+        { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" },
+        { id: "code1", name: "Code Runner", type: "code" }
+      ]
+    },
+    { name: "Reminders", channels: [{ id: "reminder1", name: "My Reminders", type: "reminder" }] }
+  ];
+  const chatMessages = {}, flashcards = {}, reminders = {};
+  window.whiteboardData = window.whiteboardData || {};
+  window.codeData = window.codeData || {};
 
-/***********************
- * Sidebar & Channel Selection
- ***********************/
-function renderSidebar() {
+  // Helper for file reading; returns a promise.
+  const readFile = (file) => new Promise((res) => {
+    const reader = new FileReader();
+    reader.onload = e => res({ name: file.name, type: file.type, content: e.target.result });
+    (file.type.startsWith("image/") || file.type.startsWith("audio/"))
+      ? reader.readAsDataURL(file)
+      : reader.readAsText(file);
+  });
+
+  // Sidebar – uses document fragment to minimize reflows.
+  const renderSidebar = () => {
     const sidebar = document.querySelector(".sidebar");
     sidebar.innerHTML = "";
-
-    // Collapse button
-    const collapseBtn = document.createElement("button");
-    collapseBtn.textContent = "▶";
-    collapseBtn.classList.add("collapse-btn");
-    collapseBtn.addEventListener("click", () => sidebar.classList.toggle("collapsed"));
-    sidebar.appendChild(collapseBtn);
-
-    // Category rendering
-    categories.forEach(category => {
-        const catTitle = document.createElement("h2");
-        catTitle.textContent = category.name;
-        sidebar.appendChild(catTitle);
-
-        const ul = document.createElement("ul");
-        ul.classList.add("channel-list");
-
-        category.channels.forEach(channel => {
-            const li = document.createElement("li");
-            li.textContent = channel.name;
-            li.classList.add("channel-item");
-            li.dataset.channelId = channel.id;
-            li.dataset.channelType = channel.type;
-
-            if (channel.type === "function") {
-                // When clicking a saved function, switch to the Code Runner channel and load its code.
-                li.addEventListener("click", () => {
-                    // Find the Code Runner channel (assumes its type is "code")
-                    const codeChannel = categories
-                        .flatMap(cat => cat.channels)
-                        .find(ch => ch.type === "code");
-                    if (codeChannel) {
-                        window.codeData[codeChannel.id] = channel.code;
-                        selectChannel(codeChannel);
-                    }
-                });
-                // Add a delete button next to the saved function
-                const deleteBtn = document.createElement("button");
-                deleteBtn.textContent = "Delete";
-                deleteBtn.style.marginLeft = "10px";
-                deleteBtn.addEventListener("click", (e) => {
-                    e.stopPropagation(); // Prevent the parent li click event
-                    const functionsCategory = categories.find(cat => cat.name === "Functions");
-                    if (functionsCategory) {
-                        // Filter out only the function with the matching unique id
-                        functionsCategory.channels = functionsCategory.channels.filter(ch => ch.id !== channel.id);
-                        renderSidebar();
-                    }
-                });
-                li.appendChild(deleteBtn);
-            } else {
-                li.addEventListener("click", () => selectChannel(channel));
-            }
-            ul.appendChild(li);
-        });
-        sidebar.appendChild(ul);
-    });
-
-    // Version text
-    const versionText = document.createElement("div");
-    versionText.classList.add("version-text");
-    versionText.textContent = "v1.12";
-    sidebar.appendChild(versionText);
-
-    // Collapse sidebar when clicking outside
-    if (!window.sidebarOutsideListenerAdded) {
-        const collapseSidebar = (event) => {
-            if (sidebar && !sidebar.contains(event.target)) {
-                sidebar.classList.add("collapsed");
-            }
-        };
-        document.addEventListener("click", collapseSidebar);
-        document.addEventListener("touchstart", collapseSidebar);
-        window.sidebarOutsideListenerAdded = true;
-    }
-}
-
-function selectChannel(channel) {
-    document.querySelectorAll(".channel-item").forEach(item => {
-        item.classList.remove("active-channel");
-        if (item.dataset.channelId === channel.id) {
-            item.classList.add("active-channel");
+    sidebar.appendChild(el("button", { class: "collapse-btn", onclick: () => sidebar.classList.toggle("collapsed") }, "▶"));
+    const frag = document.createDocumentFragment();
+    categories.forEach(cat => {
+      frag.appendChild(el("h2", {}, cat.name));
+      const ul = el("ul", { class: "channel-list" });
+      cat.channels.forEach(ch => {
+        const li = el("li", {
+          class: "channel-item",
+          "data-channel-id": ch.id,
+          "data-channel-type": ch.type,
+          onclick: () => {
+            if (ch.type === "function") {
+              const codeCh = categories.flatMap(c => c.channels).find(ch => ch.type === "code");
+              if (codeCh) { window.codeData[codeCh.id] = ch.code; selectChannel(codeCh); }
+            } else selectChannel(ch);
+          }
+        }, ch.name);
+        if (ch.type === "function") {
+          li.appendChild(el("button", { style: { marginLeft: "10px" }, onclick: e => {
+            e.stopPropagation();
+            const funcCat = categories.find(c => c.name === "Functions");
+            if (funcCat) { funcCat.channels = funcCat.channels.filter(x => x.id !== ch.id); renderSidebar(); }
+          } }, "Delete"));
         }
+        ul.appendChild(li);
+      });
+      frag.appendChild(ul);
     });
+    frag.appendChild(el("div", { class: "version-text" }, "v1.13"));
+    sidebar.appendChild(frag);
+    if (!window.sidebarOutsideListenerAdded) {
+      const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
+      document.addEventListener("click", collapseSidebar);
+      document.addEventListener("touchstart", collapseSidebar);
+      window.sidebarOutsideListenerAdded = true;
+    }
+  };
+
+  const selectChannel = channel => {
+    document.querySelectorAll(".channel-item").forEach(item =>
+      item.classList.toggle("active-channel", item.getAttribute("data-channel-id") === channel.id)
+    );
     document.querySelector(".sidebar").classList.add("collapsed");
     renderChannel(channel);
-}
+  };
 
-function renderChannel(channel) {
+  // Channel dispatcher.
+  const renderChannel = channel => {
     const main = document.querySelector(".main-content");
     main.innerHTML = "";
-    if (channel.type === "text") {
-        renderTextChannel(main, channel);
-    } else if (channel.type === "flashcard") {
-        renderFlashcardChannel(main, channel);
-    } else if (channel.type === "whiteboard") {
-        renderWhiteboardChannel(main, channel);
-    } else if (channel.type === "code") {
-        renderCodeChannel(main, channel);
-    } else if (channel.type === "reminder") {
-        renderReminderChannel(main, channel);
-    }
-}
+    ({
+      text: () => renderTextChannel(main, channel),
+      flashcard: () => renderFlashcardChannel(main, channel),
+      whiteboard: () => renderWhiteboardChannel(main, channel),
+      code: () => renderCodeChannel(main, channel),
+      reminder: () => renderReminderChannel(main, channel)
+    }[channel.type] || (() => {}))();
+  };
 
-/***********************
- * 1. General Chat (Text Channel with Attachments and Editable Messages)
- ***********************/
-function renderTextChannel(container, channel) {
+  // 1. Text Channel – optimized with fragments and event delegation.
+  const renderTextChannel = (container, channel) => {
     container.innerHTML = "";
-
-    const header = document.createElement("h2");
-    header.textContent = "Text Channel";
-    container.appendChild(header);
-
-    const chatContainer = document.createElement("div");
-    chatContainer.classList.add("chat-container");
-    chatContainer.style.height = "90%";
-
-    const messagesDiv = document.createElement("div");
-    messagesDiv.classList.add("messages-area");
+    container.appendChild(el("h2", {}, "Text Channel"));
+    const chatContainer = el("div", { class: "chat-container", style: { height: "90%" } });
+    const messagesDiv = el("div", { class: "messages-area" });
     chatContainer.appendChild(messagesDiv);
 
-    function updateMessages() {
-        messagesDiv.innerHTML = "";
-        (chatMessages[channel.id] || []).forEach((msg, index) => {
-            if (typeof msg === "string") {
-                msg = {
-                    date: new Date().toLocaleString(),
-                    text: msg,
-                    files: []
-                };
-                chatMessages[channel.id][index] = msg;
-            }
-            const msgContainer = document.createElement("div");
-            msgContainer.classList.add("message-container");
-
-            const dateDiv = document.createElement("div");
-            dateDiv.classList.add("message-date");
-            dateDiv.textContent = msg.date;
-            msgContainer.appendChild(dateDiv);
-
-            const contentDiv = document.createElement("div");
-            contentDiv.classList.add("message-content");
-            const textContainer = document.createElement("span");
-
-            const text = msg.text;
-            const urlRegex = /(https?:\/\/\S+|www\.\S+)/gi;
-            const parts = text.split(urlRegex);
-
-            parts.forEach((part, i) => {
-                if (!part)
-                    return;
-                if (i % 2 === 1) {
-                    let url = part;
-                    if (/^www\./i.test(url)) {
-                        url = 'http://' + url;
-                    }
-                    try {
-                        new URL(url);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.textContent = part;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                        textContainer.appendChild(link);
-                    } catch (e) {
-                        textContainer.appendChild(document.createTextNode(part));
-                    }
-                } else {
-                    textContainer.appendChild(document.createTextNode(part));
-                }
-            });
-            contentDiv.appendChild(textContainer);
-
-            if (msg.files && msg.files.length > 0) {
-                const filesDiv = document.createElement("div");
-                msg.files.forEach(file => {
-                    const fileWrapper = document.createElement("div");
-                    fileWrapper.style.border = "1px solid #ccc";
-                    fileWrapper.style.padding = "5px";
-                    fileWrapper.style.marginTop = "5px";
-                    if (file.type.startsWith("image/")) {
-                        const img = document.createElement("img");
-                        img.src = file.content;
-                        img.style.maxWidth = "200px";
-                        fileWrapper.appendChild(img);
-                    } else if (file.type.startsWith("audio/")) {
-                        const audio = document.createElement("audio");
-                        audio.controls = true;
-                        audio.src = file.content;
-                        fileWrapper.appendChild(audio);
-                    } else if (file.type.startsWith("text/") || file.type === "") {
-                        const pre = document.createElement("pre");
-                        pre.textContent = file.content;
-                        pre.style.maxHeight = "150px";
-                        pre.style.overflow = "auto";
-                        fileWrapper.appendChild(pre);
-                    } else {
-                        fileWrapper.textContent = file.name;
-                    }
-                    const downloadBtn = document.createElement("button");
-                    downloadBtn.textContent = "Download";
-                    downloadBtn.addEventListener("click", () => {
-                        const a = document.createElement("a");
-                        if (file.type.startsWith("image/") || file.type.startsWith("audio/")) {
-                            a.href = file.content;
-                        } else {
-                            const blob = new Blob([file.content], {
-                                type: file.type || "text/plain"
-                            });
-                            a.href = URL.createObjectURL(blob);
-                        }
-                        a.download = file.name;
-                        a.click();
-                    });
-                    fileWrapper.appendChild(downloadBtn);
-                    filesDiv.appendChild(fileWrapper);
-                });
-                contentDiv.appendChild(filesDiv);
-            }
-            msgContainer.appendChild(contentDiv);
-
-            const btnContainer = document.createElement("div");
-            btnContainer.classList.add("toolbar");
-            const editBtn = document.createElement("button");
-            editBtn.textContent = "Edit";
-            const removeBtn = document.createElement("button");
-            removeBtn.textContent = "Remove";
-            btnContainer.appendChild(editBtn);
-            btnContainer.appendChild(removeBtn);
-            msgContainer.appendChild(btnContainer);
-
-            editBtn.addEventListener("click", () => {
-                const editForm = document.createElement("form");
-                const editInput = document.createElement("input");
-                editInput.type = "text";
-                editInput.value = msg.text;
-                editForm.appendChild(editInput);
-                const editFilesDiv = document.createElement("div");
-                msg.files.forEach((file, fileIndex) => {
-                    const fileRow = document.createElement("div");
-                    fileRow.textContent = file.name;
-                    const removeFileBtn = document.createElement("button");
-                    removeFileBtn.type = "button";
-                    removeFileBtn.textContent = "Remove";
-                    removeFileBtn.addEventListener("click", () => {
-                        msg.files.splice(fileIndex, 1);
-                        updateMessages();
-                    });
-                    fileRow.appendChild(removeFileBtn);
-                    editFilesDiv.appendChild(fileRow);
-                });
-                editForm.appendChild(editFilesDiv);
-                const newAttachBtn = document.createElement("button");
-                newAttachBtn.type = "button";
-                newAttachBtn.textContent = "Attach File";
-                editForm.appendChild(newAttachBtn);
-                const newFileInput = document.createElement("input");
-                newFileInput.type = "file";
-                newFileInput.style.display = "none";
-                newFileInput.multiple = true;
-                editForm.appendChild(newFileInput);
-                newAttachBtn.addEventListener("click", () => newFileInput.click());
-                newFileInput.addEventListener("change", () => {
-                    for (const file of newFileInput.files) {
-                        if (file.type.startsWith("image/") || file.type.startsWith("audio/")) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                msg.files.push({
-                                    name: file.name,
-                                    type: file.type,
-                                    content: e.target.result
-                                });
-                                updateMessages();
-                            };
-                            reader.readAsDataURL(file);
-                        } else {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                msg.files.push({
-                                    name: file.name,
-                                    type: file.type,
-                                    content: e.target.result
-                                });
-                                updateMessages();
-                            };
-                            reader.readAsText(file);
-                        }
-                    }
-                    newFileInput.value = "";
-                });
-                const saveBtn = document.createElement("button");
-                saveBtn.type = "submit";
-                saveBtn.textContent = "Save";
-                const cancelBtn = document.createElement("button");
-                cancelBtn.type = "button";
-                cancelBtn.textContent = "Cancel";
-                editForm.appendChild(saveBtn);
-                editForm.appendChild(cancelBtn);
-                msgContainer.innerHTML = "";
-                msgContainer.appendChild(editForm);
-                editForm.addEventListener("submit", (e) => {
-                    e.preventDefault();
-                    msg.text = editInput.value;
-                    updateMessages();
-                });
-                cancelBtn.addEventListener("click", () => {
-                    updateMessages();
-                });
-            });
-
-            removeBtn.addEventListener("click", () => {
-                chatMessages[channel.id].splice(index, 1);
-                updateMessages();
-            });
-
-            messagesDiv.appendChild(msgContainer);
+    const updateMessages = () => {
+      messagesDiv.innerHTML = "";
+      const frag = document.createDocumentFragment();
+      (chatMessages[channel.id] || []).forEach((msg, idx) => {
+        if (typeof msg === "string") { 
+          msg = { date: new Date().toLocaleString(), text: msg, files: [] }; 
+          chatMessages[channel.id][idx] = msg; 
+        }
+        const msgContainer = el("div", { class: "message-container" });
+        msgContainer.appendChild(el("div", { class: "message-date" }, msg.date));
+        const contentDiv = el("div", { class: "message-content" });
+        const textContainer = el("span");
+        msg.text.split(/(https?:\/\/\S+|www\.\S+)/gi).forEach((part, i) => {
+          if (!part) return;
+          if (i % 2) {
+            let url = /^www\./i.test(part) ? "http://" + part : part;
+            try {
+              new URL(url);
+              textContainer.appendChild(el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, part));
+            } catch { textContainer.appendChild(document.createTextNode(part)); }
+          } else textContainer.appendChild(document.createTextNode(part));
         });
-    }
+        contentDiv.appendChild(textContainer);
+        if (msg.files?.length) {
+          const filesDiv = el("div");
+          msg.files.forEach(file => {
+            const fileWrapper = el("div", { style: { border: "1px solid #ccc", padding: "5px", marginTop: "5px" } });
+            if (file.type.startsWith("image/"))
+              fileWrapper.appendChild(el("img", { src: file.content, style: { maxWidth: "200px" } }));
+            else if (file.type.startsWith("audio/"))
+              fileWrapper.appendChild(el("audio", { src: file.content, controls: true }));
+            else if (file.type.startsWith("text/") || !file.type)
+              fileWrapper.appendChild(el("pre", { style: { maxHeight: "150px", overflow: "auto" } }, file.content));
+            else fileWrapper.textContent = file.name;
+            fileWrapper.appendChild(el("button", { onclick: () => {
+              const a = el("a");
+              if (file.type.startsWith("image/") || file.type.startsWith("audio/"))
+                a.href = file.content;
+              else {
+                const blob = new Blob([file.content], { type: file.type || "text/plain" });
+                a.href = URL.createObjectURL(blob);
+              }
+              a.download = file.name; a.click();
+            } }, "Download"));
+            filesDiv.appendChild(fileWrapper);
+          });
+          contentDiv.appendChild(filesDiv);
+        }
+        msgContainer.appendChild(contentDiv);
+        const btnContainer = el("div", { class: "toolbar" });
+        btnContainer.appendChild(el("button", { onclick: () => {
+          const editForm = el("form");
+          const editInput = el("input", { type: "text", value: msg.text });
+          editForm.appendChild(editInput);
+        
+          // Create a temporary copy of the attachments
+          let tempFiles = msg.files.slice();
+        
+          const editFilesDiv = el("div");
+          // Function to re‑render the list of attachments from tempFiles
+          const renderEditFiles = () => {
+            editFilesDiv.innerHTML = "";
+            tempFiles.forEach((file, fIdx) => {
+              const fileRow = el("div", {}, file.name);
+              fileRow.appendChild(el("button", { type: "button", onclick: () => { 
+                tempFiles.splice(fIdx, 1);
+                renderEditFiles();
+              } }, "Remove"));
+              editFilesDiv.appendChild(fileRow);
+            });
+          };
+          renderEditFiles();
+          editForm.appendChild(editFilesDiv);
+        
+          const newFileInput = el("input", { type: "file", multiple: true, style: { display: "none" } });
+          const newAttachBtn = el("button", { type: "button", onclick: e => { 
+            e.preventDefault(); newFileInput.click(); 
+          } }, "Attach File");
+          editForm.appendChild(newAttachBtn);
+          editForm.appendChild(newFileInput);
+          newFileInput.addEventListener("change", async () => {
+            for (const file of newFileInput.files)
+              tempFiles.push(await readFile(file));
+            renderEditFiles();
+            newFileInput.value = "";
+          });
+          const saveBtn = el("button", { type: "submit" }, "Save");
+          const cancelBtn = el("button", { type: "button", onclick: updateMessages }, "Cancel");
+          editForm.append(saveBtn, cancelBtn);
+          msgContainer.innerHTML = "";
+          msgContainer.appendChild(editForm);
+          editForm.addEventListener("submit", e => {
+            e.preventDefault();
+            msg.text = editInput.value;
+            msg.files = tempFiles; // Commit the temporary changes
+            updateMessages();
+          });
+        } }, "Edit"));        
+        btnContainer.appendChild(el("button", { onclick: () => { 
+          chatMessages[channel.id].splice(idx, 1); updateMessages(); 
+        } }, "Remove"));
+        msgContainer.appendChild(btnContainer);
+        frag.appendChild(msgContainer);
+      });
+      messagesDiv.appendChild(frag);
+    };
 
-    if (!chatMessages[channel.id]) {
-        chatMessages[channel.id] = [];
-    }
+    chatMessages[channel.id] = chatMessages[channel.id] || [];
     updateMessages();
 
-    const footerDiv = document.createElement("div");
-    footerDiv.classList.add("toolbar");
-    const textInput = document.createElement("input");
-    textInput.type = "text";
-    textInput.placeholder = "Type a message...";
-    textInput.style.flex = "1";
-    textInput.style.minWidth = "100px";
-    textInput.style.maxWidth = "calc(100% - 120px)";
-
+    const footerDiv = el("div", { class: "toolbar" });
+    const textInput = el("input", { type: "text", placeholder: "Type a message...", style: { flex: "1", minWidth: "100px", maxWidth: "calc(100% - 120px)" } });
     footerDiv.appendChild(textInput);
-    const attachBtn = document.createElement("button");
-    attachBtn.textContent = "Attach File";
-    attachBtn.type = "button";
-    footerDiv.appendChild(attachBtn);
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.style.display = "none";
-    fileInput.multiple = true;
+    const fileInput = el("input", { type: "file", multiple: true, style: { display: "none" } });
+    footerDiv.appendChild(el("button", { type: "button", onclick: () => fileInput.click() }, "Attach File"));
     footerDiv.appendChild(fileInput);
-    const sendBtn = document.createElement("button");
-    sendBtn.textContent = "Send";
-    sendBtn.type = "submit";
-    footerDiv.appendChild(sendBtn);
-    const fileListDiv = document.createElement("div");
+    footerDiv.appendChild(el("button", { type: "submit" }, "Send"));
+    const fileListDiv = el("div");
     footerDiv.appendChild(fileListDiv);
-
     let attachedFiles = [];
-    function updateFileList() {
-        fileListDiv.innerHTML = "";
-        attachedFiles.forEach((file, index) => {
-            const fileDiv = document.createElement("div");
-            fileDiv.textContent = file.name;
-            const removeBtn = document.createElement("button");
-            removeBtn.textContent = "Remove";
-            removeBtn.type = "button";
-            removeBtn.style.marginLeft = "10px";
-            removeBtn.addEventListener("click", () => {
-                attachedFiles.splice(index, 1);
-                updateFileList();
-            });
-            fileDiv.appendChild(removeBtn);
-            fileListDiv.appendChild(fileDiv);
-        });
-    }
-    attachBtn.addEventListener("click", () => fileInput.click());
-    fileInput.addEventListener("change", () => {
-        for (const file of fileInput.files) {
-            if (file.type.startsWith("image/") || file.type.startsWith("audio/")) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    attachedFiles.push({
-                        name: file.name,
-                        type: file.type,
-                        content: e.target.result
-                    });
-                    updateFileList();
-                };
-                reader.readAsDataURL(file);
-            } else {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    attachedFiles.push({
-                        name: file.name,
-                        type: file.type,
-                        content: e.target.result
-                    });
-                    updateFileList();
-                };
-                reader.readAsText(file);
-            }
-        }
-        fileInput.value = "";
+    const updateFileList = () => {
+      fileListDiv.innerHTML = "";
+      attachedFiles.forEach((file, i) => {
+        const fileDiv = el("div", {}, file.name);
+        fileDiv.appendChild(el("button", { style: { marginLeft: "10px" }, onclick: () => {
+          attachedFiles.splice(i, 1); updateFileList();
+        } }, "Remove"));
+        fileListDiv.appendChild(fileDiv);
+      });
+    };
+    fileInput.addEventListener("change", async () => {
+      for (const file of fileInput.files)
+        attachedFiles.push(await readFile(file));
+      updateFileList(); fileInput.value = "";
     });
-    const form = document.createElement("form");
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const text = textInput.value;
-        let messageObj;
-        if (attachedFiles.length > 0) {
-            messageObj = {
-                date: new Date().toLocaleString(),
-                text,
-                files: attachedFiles
-            };
-        } else {
-            messageObj = {
-                date: new Date().toLocaleString(),
-                text,
-                files: []
-            };
-        }
-        if ((typeof text === "string" && text.trim() !== "") || attachedFiles.length > 0) {
-            chatMessages[channel.id].push(messageObj);
-            updateMessages();
-            textInput.value = "";
-            attachedFiles = [];
-            updateFileList();
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-    });
+    const form = el("form", { onsubmit: e => {
+      e.preventDefault();
+      const text = textInput.value;
+      if ((typeof text === "string" && text.trim() !== "") || attachedFiles.length) {
+        chatMessages[channel.id].push({ date: new Date().toLocaleString(), text, files: attachedFiles });
+        updateMessages(); textInput.value = ""; attachedFiles = []; updateFileList();
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    }});
     form.appendChild(footerDiv);
     chatContainer.appendChild(form);
     container.appendChild(chatContainer);
-}
+  };
 
-/***********************
- * 2. Flashcard Maker & Tester (Multiple answers, test mode shows score and highlights answers)
- ***********************/
-function renderFlashcardChannel(container, channel) {
-    const header = document.createElement("h2");
-    header.textContent = "Flashcard Maker & Tester";
-    container.appendChild(header);
-
-    const modeContainer = document.createElement("div");
-
-    // Creation mode container.
-    const creationDiv = document.createElement("div");
-
-    // Form for adding flashcards.
-    const form = document.createElement("form");
-    form.classList.add("flashcard-form");
-
-    const questionInput = document.createElement("input");
-    questionInput.type = "text";
-    questionInput.placeholder = "Enter question here";
-    questionInput.required = true;
-    questionInput.style.width = "100%";
+  // 2. Flashcard Maker & Tester – uses the same el() helper and fragments.
+  const renderFlashcardChannel = (container, channel) => {
+    container.innerHTML = "";
+    container.appendChild(el("h2", {}, "Flashcard Maker & Tester"));
+    const modeContainer = el("div"), creationDiv = el("div");
+    const form = el("form", { class: "flashcard-form", onsubmit: e => {
+      e.preventDefault();
+      const q = questionInput.value.trim();
+      if (!q) return;
+      const answers = Array.from(answersContainer.querySelectorAll(".answer-row")).map(row => {
+        const [inp, chk] = row.querySelectorAll("input");
+        return inp.value.trim() ? { text: inp.value, correct: chk.checked } : null;
+      }).filter(x => x);
+      if (answers.length) {
+        flashcards[channel.id] = flashcards[channel.id] || [];
+        flashcards[channel.id].push({ question: q, answers });
+        questionInput.value = ""; answersContainer.innerHTML = ""; addAnswerRow(); renderFlashcardsList();
+      }
+    }});
+    const questionInput = el("input", { type: "text", placeholder: "Enter question here", required: true, style: { width: "100%" } });
     form.appendChild(questionInput);
-
-    const answersContainer = document.createElement("div");
-    answersContainer.id = "answers-container";
+    const answersContainer = el("div", { id: "answers-container" });
     form.appendChild(answersContainer);
-
-    function addAnswerRow(defaultText = "", defaultCorrect = false) {
-        const row = document.createElement("div");
-        row.classList.add("answer-row");
-        const answerInput = document.createElement("input");
-        answerInput.type = "text";
-        answerInput.placeholder = "Answer";
-        answerInput.required = true;
-        answerInput.value = defaultText;
-        answerInput.style.flex = "1";
-        answerInput.style.minWidth = "80px";
-        answerInput.style.maxWidth = "calc(100% - 120px)";
-        row.appendChild(answerInput);
-        const correctToggle = document.createElement("input");
-        correctToggle.type = "checkbox";
-        correctToggle.title = "Mark as correct answer";
-        correctToggle.checked = defaultCorrect;
-        row.appendChild(correctToggle);
-        const removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.textContent = "Remove";
-        removeBtn.addEventListener("click", () => {
-            answersContainer.removeChild(row);
-        });
-        row.appendChild(removeBtn);
-        answersContainer.appendChild(row);
-    }
+    const addAnswerRow = (txt = "", corr = false) => {
+      const row = el("div", { class: "answer-row" });
+      row.appendChild(el("input", { type: "text", placeholder: "Answer", required: true, value: txt, style: { flex: "1", minWidth: "80px", maxWidth: "calc(100% - 120px)" } }));
+      row.appendChild(el("input", { type: "checkbox", title: "Mark as correct answer", checked: corr }));
+      row.appendChild(el("button", { type: "button", onclick: () => row.remove() }, "Remove"));
+      answersContainer.appendChild(row);
+    };
     addAnswerRow();
-
-    const addAnswerBtn = document.createElement("button");
-    addAnswerBtn.type = "button";
-    addAnswerBtn.textContent = "Add Answer";
-    addAnswerBtn.addEventListener("click", () => {
-        addAnswerRow();
-    });
-    form.appendChild(addAnswerBtn);
-
-    const addFlashcardBtn = document.createElement("button");
-    addFlashcardBtn.type = "submit";
-    addFlashcardBtn.textContent = "Add Flashcard";
-    form.appendChild(addFlashcardBtn);
-
+    form.appendChild(el("button", { type: "button", onclick: () => addAnswerRow() }, "Add Answer"));
+    form.appendChild(el("button", { type: "submit" }, "Add Flashcard"));
     creationDiv.appendChild(form);
-
-    const startTestBtn = document.createElement("button");
-    startTestBtn.type = "button";
-    startTestBtn.textContent = "Start Test";
+    const startTestBtn = el("button", { type: "button" }, "Start Test");
     creationDiv.appendChild(startTestBtn);
-
-    // --- Export Flashcards Button ---
-    const exportBtn = document.createElement("button");
-    exportBtn.type = "button";
-    exportBtn.textContent = "Export Flashcards";
-    exportBtn.addEventListener("click", () => {
-        const data = flashcards[channel.id] || [];
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], {
-            type: "application/json"
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "flashcards.json";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    });
-    creationDiv.appendChild(exportBtn);
-
-    // --- Import Flashcards Button ---
-    // Create a hidden file input for JSON files.
-    const importInput = document.createElement("input");
-    importInput.type = "file";
-    importInput.accept = "application/json";
-    importInput.style.display = "none";
-    importInput.addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (!file)
-            return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const importedData = JSON.parse(event.target.result);
-                if (Array.isArray(importedData)) {
-                    flashcards[channel.id] = importedData;
-                    renderFlashcardsList();
-                    // Successfully imported, no alert.
-                } else {
-                    // Invalid format, no alert.
-                }
-            } catch (err) {
-                // Error parsing JSON, no alert.
-            }
-        };
-        reader.readAsText(file);
+    // Export / Import buttons
+    creationDiv.appendChild(el("button", { type: "button", onclick: () => {
+      const data = flashcards[channel.id] || [];
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      el("a", { href: URL.createObjectURL(blob), download: "flashcards.json" }).click();
+    }}, "Export Flashcards"));
+    const importInput = el("input", { type: "file", accept: "application/json", style: { display: "none" },
+      onchange: async e => {
+        const file = e.target.files[0]; if (!file) return;
+        const fileObj = await readFile(file);
+        try {
+          const imported = JSON.parse(fileObj.content);
+          if (Array.isArray(imported)) { flashcards[channel.id] = imported; renderFlashcardsList(); }
+        } catch {}
+      }
     });
     creationDiv.appendChild(importInput);
-
-    const importBtn = document.createElement("button");
-    importBtn.type = "button";
-    importBtn.textContent = "Import Flashcards";
-    importBtn.addEventListener("click", () => {
-        importInput.click();
-    });
-    creationDiv.appendChild(importBtn);
-
-    const flashcardListDiv = document.createElement("div");
+    creationDiv.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import Flashcards"));
+    const flashcardListDiv = el("div");
     creationDiv.appendChild(flashcardListDiv);
-
-    // Test mode container (hidden initially)
-    const testDiv = document.createElement("div");
-    testDiv.style.display = "none";
-    modeContainer.appendChild(creationDiv);
-    modeContainer.appendChild(testDiv);
+    const testDiv = el("div", { style: { display: "none" } });
+    modeContainer.append(creationDiv, testDiv);
     container.appendChild(modeContainer);
-
-    function renderFlashcardsList() {
-        flashcardListDiv.innerHTML = "";
-        flashcards[channel.id] = flashcards[channel.id] || [];
-        flashcards[channel.id].forEach((card, index) => {
-            const cardDiv = document.createElement("div");
-            cardDiv.classList.add("flashcard");
-
-            const questionP = document.createElement("p");
-            questionP.textContent = "Q: " + card.question;
-            cardDiv.appendChild(questionP);
-
-            const answersList = document.createElement("ul");
+    const renderFlashcardsList = () => {
+      flashcardListDiv.innerHTML = "";
+      (flashcards[channel.id] = flashcards[channel.id] || []).forEach((card, idx) => {
+        const cardDiv = el("div", { class: "flashcard" });
+        cardDiv.appendChild(el("p", {}, "Q: " + card.question));
+        const ul = el("ul");
+        card.answers.forEach(ans => ul.appendChild(el("li", {}, ans.text + (ans.correct ? " (Correct)" : ""))));
+        cardDiv.appendChild(ul);
+        const toolbar = el("div", { class: "toolbar" });
+        toolbar.appendChild(el("button", { type: "button", onclick: function () {
+          if (this.textContent === "Edit") {
+            const qInput = el("input", { type: "text", value: card.question });
+            cardDiv.replaceChild(qInput, cardDiv.querySelector("p"));
+            const answersDiv = el("div");
             card.answers.forEach(ans => {
-                const li = document.createElement("li");
-                li.textContent = ans.text + (ans.correct ? " (Correct)" : "");
-                answersList.appendChild(li);
+              const row = el("div", { class: "answer-row" });
+              row.appendChild(el("input", { type: "text", value: ans.text }));
+              row.appendChild(el("input", { type: "checkbox", checked: ans.correct }));
+              answersDiv.appendChild(row);
             });
-            cardDiv.appendChild(answersList);
-
-            const btnContainer = document.createElement("div");
-            btnContainer.classList.add("toolbar");
-
-            const editBtn = document.createElement("button");
-            editBtn.textContent = "Edit";
-            editBtn.type = "button";
-            btnContainer.appendChild(editBtn);
-
-            const removeBtn = document.createElement("button");
-            removeBtn.textContent = "Remove";
-            removeBtn.type = "button";
-            btnContainer.appendChild(removeBtn);
-
-            cardDiv.appendChild(btnContainer);
-
-            editBtn.addEventListener("click", () => {
-                if (editBtn.textContent === "Edit") {
-                    const questionInputEdit = document.createElement("input");
-                    questionInputEdit.type = "text";
-                    questionInputEdit.value = card.question;
-                    cardDiv.replaceChild(questionInputEdit, questionP);
-
-                    const answersEditDiv = document.createElement("div");
-                    card.answers.forEach(ans => {
-                        const row = document.createElement("div");
-                        row.classList.add("answer-row");
-                        const answerInputEdit = document.createElement("input");
-                        answerInputEdit.type = "text";
-                        answerInputEdit.value = ans.text;
-                        row.appendChild(answerInputEdit);
-                        const correctToggleEdit = document.createElement("input");
-                        correctToggleEdit.type = "checkbox";
-                        correctToggleEdit.checked = ans.correct;
-                        row.appendChild(correctToggleEdit);
-                        answersEditDiv.appendChild(row);
-                    });
-                    const addNewAnswerBtn = document.createElement("button");
-                    addNewAnswerBtn.type = "button";
-                    addNewAnswerBtn.textContent = "Add Answer";
-                    addNewAnswerBtn.addEventListener("click", () => {
-                        const row = document.createElement("div");
-                        row.classList.add("answer-row");
-                        const answerInputEdit = document.createElement("input");
-                        answerInputEdit.type = "text";
-                        answerInputEdit.placeholder = "New answer";
-                        row.appendChild(answerInputEdit);
-                        const correctToggleEdit = document.createElement("input");
-                        correctToggleEdit.type = "checkbox";
-                        row.appendChild(correctToggleEdit);
-                        answersEditDiv.appendChild(row);
-                    });
-                    answersEditDiv.appendChild(addNewAnswerBtn);
-                    cardDiv.replaceChild(answersEditDiv, answersList);
-                    editBtn.textContent = "Save";
-                } else {
-                    const questionInputEdit = cardDiv.querySelector('input[type="text"]');
-                    card.question = questionInputEdit.value;
-                    const newAnswers = [];
-                    const rows = cardDiv.querySelectorAll(".answer-row");
-                    rows.forEach(row => {
-                        const textInput = row.querySelector('input[type="text"]');
-                        const toggle = row.querySelector('input[type="checkbox"]');
-                        if (textInput && textInput.value.trim() !== "") {
-                            newAnswers.push({
-                                text: textInput.value,
-                                correct: toggle.checked
-                            });
-                        }
-                    });
-                    card.answers = newAnswers;
-                    renderFlashcardsList();
-                }
+            answersDiv.appendChild(el("button", { type: "button", onclick: () => {
+              const row = el("div", { class: "answer-row" });
+              row.appendChild(el("input", { type: "text", placeholder: "New answer" }));
+              row.appendChild(el("input", { type: "checkbox" }));
+              answersDiv.appendChild(row);
+            }}, "Add Answer"));
+            cardDiv.replaceChild(answersDiv, ul);
+            this.textContent = "Save";
+          } else {
+            const qInput = cardDiv.querySelector("input[type='text']");
+            card.question = qInput.value;
+            const newAns = [];
+            cardDiv.querySelectorAll(".answer-row").forEach(row => {
+              const [inp, chk] = row.querySelectorAll("input");
+              if (inp.value.trim()) newAns.push({ text: inp.value, correct: chk.checked });
             });
-
-            removeBtn.addEventListener("click", () => {
-                flashcards[channel.id].splice(index, 1);
-                renderFlashcardsList();
-            });
-
-            flashcardListDiv.appendChild(cardDiv);
-        });
-
-        // Update Start Test button state
-        startTestBtn.disabled = !flashcards[channel.id] || flashcards[channel.id].length === 0;
-    }
-
-    // Initial render of flashcards list
+            card.answers = newAns; renderFlashcardsList();
+          }
+        } }, "Edit"));
+        toolbar.appendChild(el("button", { type: "button", onclick: () => { flashcards[channel.id].splice(idx, 1); renderFlashcardsList(); } }, "Remove"));
+        cardDiv.appendChild(toolbar);
+        flashcardListDiv.appendChild(cardDiv);
+      });
+      startTestBtn.disabled = !(flashcards[channel.id]?.length);
+    };
     renderFlashcardsList();
-
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const question = questionInput.value.trim();
-        if (!question)
-            return;
-        const answerRows = answersContainer.querySelectorAll(".answer-row");
-        const answersArr = [];
-        answerRows.forEach(row => {
-            const textInput = row.querySelector('input[type="text"]');
-            const toggle = row.querySelector('input[type="checkbox"]');
-            if (textInput && textInput.value.trim() !== "") {
-                answersArr.push({
-                    text: textInput.value,
-                    correct: toggle.checked
-                });
-            }
-        });
-        if (answersArr.length === 0)
-            return;
-        flashcards[channel.id] = flashcards[channel.id] || [];
-        flashcards[channel.id].push({
-            question,
-            answers: answersArr
-        });
-        questionInput.value = "";
-        answersContainer.innerHTML = "";
-        addAnswerRow();
-        renderFlashcardsList();
-    });
-
     startTestBtn.addEventListener("click", () => {
-        creationDiv.style.display = "none";
-        renderTestMode(testDiv, channel);
-        testDiv.style.display = "block";
+      creationDiv.style.display = "none";
+      renderTestMode(testDiv, channel);
+      testDiv.style.display = "block";
     });
-
-    function renderTestMode(testContainer, channel) {
-        testContainer.innerHTML = "";
-        const flashcardsArr = [...(flashcards[channel.id] || [])].sort(() => Math.random() - 0.5);
-        if (flashcardsArr.length === 0) {
-            testContainer.textContent = "No flashcards available for testing.";
-            return;
-        }
-        const formTest = document.createElement("form");
-
-        flashcardsArr.forEach((card, idx) => {
-            const questionDiv = document.createElement("div");
-            questionDiv.style.marginBottom = "10px";
-
-            const questionP = document.createElement("p");
-            questionP.textContent = "Q: " + card.question;
-            questionDiv.appendChild(questionP);
-
-            card.answers.forEach((ans, aIdx) => {
-                const label = document.createElement("label");
-                label.style.display = "block";
-
-                const checkbox = document.createElement("input");
-                checkbox.type = "checkbox";
-                checkbox.name = `card${idx}`;
-                checkbox.value = aIdx;
-
-                label.appendChild(checkbox);
-                label.appendChild(document.createTextNode(" " + ans.text));
-                questionDiv.appendChild(label);
-            });
-
-            formTest.appendChild(questionDiv);
+    const renderTestMode = (testContainer, channel) => {
+      testContainer.innerHTML = "";
+      const cards = [...(flashcards[channel.id] || [])].sort(() => Math.random() - 0.5);
+      if (!cards.length) { testContainer.textContent = "No flashcards available for testing."; return; }
+      const formTest = el("form", { onsubmit: e => {
+        e.preventDefault();
+        let score = 0;
+        cards.forEach((card, idx) => {
+          const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`)).map(i => +i.value);
+          const correct = card.answers.map((ans, i) => ans.correct ? i : null).filter(x => x !== null);
+          if (selected.sort().toString() === correct.sort().toString()) score++;
+          formTest.querySelectorAll(`input[name="card${idx}"]`).forEach(inp => {
+            const val = +inp.value;
+            if (correct.includes(val)) inp.parentElement.classList.add("correct-highlight");
+            else if (inp.checked) inp.parentElement.classList.add("incorrect-highlight");
+            inp.disabled = true;
+          });
         });
-
-        const submitTestBtn = document.createElement("button");
-        submitTestBtn.type = "submit";
-        submitTestBtn.textContent = "Submit Answers";
-        formTest.appendChild(submitTestBtn);
-
-        const backBtn = document.createElement("button");
-        backBtn.type = "button";
-        backBtn.textContent = "Back";
-        backBtn.addEventListener("click", () => {
-            testContainer.style.display = "none";
-            creationDiv.style.display = "block";
+        formTest.querySelector("button[type='submit']").disabled = true;
+        formTest.appendChild(el("div", { style: { marginTop: "10px" } }, `Your score: ${score} / ${cards.length}`));
+      }});
+      cards.forEach((card, idx) => {
+        const qDiv = el("div", { style: { marginBottom: "10px" } });
+        qDiv.appendChild(el("p", {}, "Q: " + card.question));
+        card.answers.forEach((ans, aIdx) => {
+          const label = el("label", { style: { display: "block" } });
+          label.appendChild(el("input", { type: "checkbox", name: `card${idx}`, value: aIdx }));
+          label.append(" " + ans.text);
+          qDiv.appendChild(label);
         });
-        formTest.appendChild(backBtn);
+        formTest.appendChild(qDiv);
+      });
+      formTest.appendChild(el("button", { type: "submit" }, "Submit Answers"));
+      formTest.appendChild(el("button", { type: "button", onclick: () => {
+        testContainer.style.display = "none";
+        creationDiv.style.display = "block";
+      }}, "Back"));
+      testContainer.appendChild(formTest);
+    };
+  };
 
-        const resultDiv = document.createElement("div");
-        resultDiv.style.marginTop = "10px";
-        formTest.appendChild(resultDiv);
-
-        formTest.addEventListener("submit", (e) => {
-            e.preventDefault();
-            let score = 0;
-
-            flashcardsArr.forEach((card, idx) => {
-                const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`))
-                    .map(input => parseInt(input.value));
-
-                const correctIndices = card.answers
-                    .map((ans, aIdx) => (ans.correct ? aIdx : null))
-                    .filter(aIdx => aIdx !== null);
-
-                if (selected.sort().toString() === correctIndices.sort().toString()) {
-                    score++;
-                }
-
-                // Apply correct/incorrect styles and disable checkboxes
-                const labels = formTest.querySelectorAll(`input[name="card${idx}"]`);
-                labels.forEach(input => {
-                    const value = parseInt(input.value);
-                    if (correctIndices.includes(value)) {
-                        input.parentElement.classList.add("correct-highlight");
-                    }
-                    if (!correctIndices.includes(value) && input.checked) {
-                        input.parentElement.classList.add("incorrect-highlight");
-                    }
-                    input.disabled = true;
-                });
-                submitTestBtn.disabled = true;
-            });
-
-            resultDiv.textContent = `Your score: ${score} / ${flashcardsArr.length}`;
-        });
-
-        testContainer.appendChild(formTest);
-    }
-}
-
-/***********************
- * 3. Whiteboard (Full-screen canvas with relative brush size and brush indicator)
- ***********************/
-function renderWhiteboardChannel(container, channel) {
-    // Create header
-    const header = document.createElement("h2");
-    header.textContent = "Whiteboard";
-    container.appendChild(header);
-
-    // Create toolbar
-    const toolbar = document.createElement("div");
-    toolbar.classList.add("toolbar");
-    toolbar.style.display = "flex";
-    toolbar.style.gap = "10px";
-    toolbar.style.marginBottom = "10px";
-
-    // Color Picker
-    const colorPicker = document.createElement("input");
-    colorPicker.type = "color";
-    colorPicker.value = "#000000";
-    toolbar.appendChild(colorPicker);
-
-    // Size Slider
-    const sizeSlider = document.createElement("input");
-    sizeSlider.type = "range";
-    sizeSlider.min = "1";
-    sizeSlider.max = "20";
-    sizeSlider.value = "1";
-    toolbar.appendChild(sizeSlider);
-
-    // Eraser Button
-    const eraserButton = document.createElement("button");
-    eraserButton.textContent = "Eraser";
-    toolbar.appendChild(eraserButton);
-
-    // --- New Buttons for Pan and Zoom ---
-    // Pan Mode Button
-    const panModeButton = document.createElement("button");
-    panModeButton.textContent = "Pan Mode";
-    panModeButton.style.backgroundColor = "";
-    toolbar.appendChild(panModeButton);
-
-    // Zoom In Button
-    const zoomInButton = document.createElement("button");
-    zoomInButton.textContent = "Zoom In";
-    toolbar.appendChild(zoomInButton);
-
-    // Zoom Out Button
-    const zoomOutButton = document.createElement("button");
-    zoomOutButton.textContent = "Zoom Out";
-    toolbar.appendChild(zoomOutButton);
-    // --- End New Buttons ---
-
+  // 3. Whiteboard – performance improvements include caching math and using a redraw function with minimal updates.
+  const renderWhiteboardChannel = (container, channel) => {
+    container.innerHTML = "";
+    container.appendChild(el("h2", {}, "Whiteboard"));
+    const toolbar = el("div", { class: "toolbar", style: { display: "flex", gap: "10px", marginBottom: "10px" } });
+    const colorPicker = el("input", { type: "color", value: "#000000", onchange: e => { brushColor = e.target.value; eraserMode = false; eraserButton.style.backgroundColor = ""; } });
+    const sizeSlider = el("input", { type: "range", min: "1", max: "20", value: "1", onchange: e => brushSize = +e.target.value });
+    const eraserButton = el("button", { onclick: () => { eraserMode = !eraserMode; eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : ""; } }, "Eraser");
+    const panModeButton = el("button", { onclick: () => { panMode = !panMode; panModeButton.style.backgroundColor = panMode ? "#cccccc" : ""; } }, "Pan Mode");
+    const zoomInButton = el("button", { onclick: () => {
+      const factor = 1.25, newScale = scale * factor, cx = canvas.width / 2, cy = canvas.height / 2;
+      offsetX += cx * (1 / newScale - 1 / scale);
+      offsetY += cy * (1 / newScale - 1 / scale); scale = newScale;
+      redrawCanvas(); whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+    } }, "Zoom In");
+    const zoomOutButton = el("button", { onclick: () => {
+      const factor = 1.5, newScale = scale / factor, cx = canvas.width / 2, cy = canvas.height / 2;
+      offsetX += cx * (1 / newScale - 1 / scale);
+      offsetY += cy * (1 / newScale - 1 / scale); scale = newScale;
+      redrawCanvas(); whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+    } }, "Zoom Out");
+    toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton);
     container.appendChild(toolbar);
-
-    // Create canvas
-    const canvas = document.createElement("canvas");
+    const canvas = el("canvas");
     container.appendChild(canvas);
     const context = canvas.getContext("2d");
-
-    // Disable right-clicking
-    document.oncontextmenu = function () {
-        return false;
-    }
-
-    // Load saved drawings for the channel
-    if (!window.whiteboardData[channel]) {
-        window.whiteboardData[channel] = [];
-    }
+    document.oncontextmenu = () => false;
+    window.whiteboardData[channel] = window.whiteboardData[channel] || [];
     const drawings = window.whiteboardData[channel];
-
-    // Load persistent pan/zoom data for the channel.
-    if (!window.whiteboardPanZoomData) {
-        window.whiteboardPanZoomData = {};
-    }
-    if (!window.whiteboardPanZoomData[channel]) {
-        window.whiteboardPanZoomData[channel] = {
-            offsetX: 0,
-            offsetY: 0,
-            scale: 1
-        };
-    }
-    let {
-        offsetX,
-        offsetY,
-        scale
-    } = window.whiteboardPanZoomData[channel];
-
-    // Cursor position
-    let cursorX,
-    cursorY,
-    prevCursorX,
-    prevCursorY;
-
-    // Brush settings
-    let brushColor = "#000000";
-    let brushSize = 1;
-    let eraserMode = false;
-
-    // Track Pan Mode state (for left‑mouse/touch panning)
-    let panMode = false;
-
-    // Event listeners for controls
-    colorPicker.addEventListener("input", () => {
-		brushColor = colorPicker.value;
-		eraserMode = false;  // Ensure eraser mode is turned off when a new color is selected
-		eraserButton.style.backgroundColor = "";  // Remove red background from eraser button
-	});
-
-    sizeSlider.addEventListener("input", () => {
-        brushSize = parseInt(sizeSlider.value, 10);
+    window.whiteboardPanZoomData = window.whiteboardPanZoomData || {};
+    whiteboardPanZoomData = window.whiteboardPanZoomData;
+    whiteboardPanZoomData[channel] = whiteboardPanZoomData[channel] || { offsetX: 0, offsetY: 0, scale: 1 };
+    let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
+        cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
+        brushColor = "#000000", brushSize = 1, eraserMode = false, panMode = false;
+    const toScreenX = x => (x + offsetX) * scale,
+          toScreenY = y => (y + offsetY) * scale,
+          toTrueX = x => (x / scale) - offsetX,
+          toTrueY = y => (y / scale) - offsetY;
+    const redrawCanvas = () => {
+      canvas.width = container.clientWidth;
+      canvas.height = container.clientHeight;
+      context.fillStyle = "#fff"; context.fillRect(0, 0, canvas.width, canvas.height);
+      drawings.forEach(line => {
+        drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
+      });
+      drawZoomAnchorDot();
+    };
+    const drawLine = (x0, y0, x1, y1, color, size) => {
+      context.beginPath(); context.moveTo(x0, y0); context.lineTo(x1, y1);
+      context.strokeStyle = color; context.lineWidth = size; context.lineCap = "round"; context.stroke();
+    };
+    const drawZoomAnchorDot = () => {
+      const cx = canvas.width / 2, cy = canvas.height / 2, crossSize = 20;
+      context.save(); context.globalCompositeOperation = "difference";
+      context.beginPath(); context.moveTo(cx, cy - crossSize / 2); context.lineTo(cx, cy + crossSize / 2);
+      context.strokeStyle = "white"; context.lineWidth = 1; context.stroke();
+      context.beginPath(); context.moveTo(cx - crossSize / 2, cy); context.lineTo(cx + crossSize / 2, cy);
+      context.strokeStyle = "white"; context.lineWidth = 2; context.stroke();
+      context.restore();
+    };
+    const isNearLine = (x0, y0, x1, y1, px, py, thr) => {
+      const A = px - x0, B = py - y0, C = x1 - x0, D = y1 - y0,
+            dot = A * C + B * D, lenSq = C * C + D * D, param = lenSq ? dot / lenSq : -1;
+      const [nx, ny] = param < 0 ? [x0, y0] : param > 1 ? [x1, y1] : [x0 + param * C, y0 + param * D];
+      return Math.hypot(px - nx, py - ny) <= thr;
+    };
+    const drawCursorCircle = () => {
+      redrawCanvas();
+      const dispSize = eraserMode ? brushSize * 3 : brushSize;
+      context.beginPath(); context.arc(cursorX, cursorY, dispSize / 2, 0, Math.PI * 2);
+      context.strokeStyle = eraserMode ? "red" : "black"; context.lineWidth = 1; context.stroke();
+    };
+    let leftMouseDown = false;
+    canvas.addEventListener("mousedown", e => {
+      if (e.button === 0) leftMouseDown = true;
+      cursorX = prevCursorX = e.offsetX; cursorY = prevCursorY = e.offsetY;
     });
-
-    eraserButton.addEventListener("click", () => {
-        eraserMode = !eraserMode;
-        eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : "";
-    });
-
-    // Pan Mode toggle button
-    panModeButton.addEventListener("click", () => {
-        panMode = !panMode;
-        panModeButton.style.backgroundColor = panMode ? "#cccccc" : "";
-    });
-
-    // Zoom In button (zooming centered on canvas center)
-    zoomInButton.addEventListener("click", () => {
-        const factor = 1.25;
-        const newScale = scale * factor;
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-        // Adjust offsets so that the true coordinate at the canvas center remains unchanged.
-        offsetX = offsetX + cx * (1 / newScale - 1 / scale);
-        offsetY = offsetY + cy * (1 / newScale - 1 / scale);
-        scale = newScale;
-        redrawCanvas();
-        window.whiteboardPanZoomData[channel] = {
-            offsetX,
-            offsetY,
-            scale
-        };
-    });
-
-    // Zoom Out button (zooming centered on canvas center)
-    zoomOutButton.addEventListener("click", () => {
-        const factor = 1.5;
-        const newScale = scale / factor;
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-        offsetX = offsetX + cx * (1 / newScale - 1 / scale);
-        offsetY = offsetY + cy * (1 / newScale - 1 / scale);
-        scale = newScale;
-        redrawCanvas();
-        window.whiteboardPanZoomData[channel] = {
-            offsetX,
-            offsetY,
-            scale
-        };
-    });
-
-    // Convert coordinates
-    function toScreenX(xTrue) {
-        return (xTrue + offsetX) * scale;
-    }
-    function toScreenY(yTrue) {
-        return (yTrue + offsetY) * scale;
-    }
-    function toTrueX(xScreen) {
-        return (xScreen / scale) - offsetX;
-    }
-    function toTrueY(yScreen) {
-        return (yScreen / scale) - offsetY;
-    }
-
-    function trueWidth() {
-        return canvas.clientWidth / scale;
-    }
-    function trueHeight() {
-        return canvas.clientHeight / scale;
-    }
-
-    function redrawCanvas() {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-
-        context.fillStyle = '#fff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Draw previous drawings
-        for (let i = 0; i < drawings.length; i++) {
-            const line = drawings[i];
-            drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
-        }
-
-        // Draw zoom anchor dot at the center
-        drawZoomAnchorDot();
-    }
-
-    function drawZoomAnchorDot() {
-        // Calculate the center of the canvas based on the current zoom and offset
-        const centerX = (canvas.width / 2);
-        const centerY = (canvas.height / 2);
-
-        // Set the size of the cross
-        const crossSize = 20;
-
-        // Save the current drawing context state
-        context.save();
-
-        // Set the global composite operation to 'difference' to invert the colors under the cross
-        context.globalCompositeOperation = 'difference';
-
-        // Draw vertical line of the cross
-        context.beginPath();
-        context.moveTo(centerX, centerY - crossSize / 2);
-        context.lineTo(centerX, centerY + crossSize / 2);
-        context.strokeStyle = 'white'; // White color to apply the 'difference' effect
-        context.lineWidth = 1;
-        context.stroke();
-
-        // Draw horizontal line of the cross
-        context.beginPath();
-        context.moveTo(centerX - crossSize / 2, centerY);
-        context.lineTo(centerX + crossSize / 2, centerY);
-        context.strokeStyle = 'white'; // White color to apply the 'difference' effect
-        context.lineWidth = 2;
-        context.stroke();
-
-        // Restore the drawing context to remove the 'difference' mode for other drawing operations
-        context.restore();
-    }
-
-    redrawCanvas();
-
-    window.addEventListener("resize", () => redrawCanvas());
-
-    function drawCursorCircle() {
-        redrawCanvas(); // Prevents trails
-
-        // Use actual screen coordinates for the cursor position
-        const cursorScreenX = cursorX;
-        const cursorScreenY = cursorY;
-
-        // Keep cursor size fixed relative to the screen
-        const displaySize = eraserMode ? brushSize * 3 : brushSize; // Match eraser effect size
-
-        context.beginPath();
-        context.arc(cursorScreenX, cursorScreenY, displaySize / 2, 0, Math.PI * 2);
-        context.strokeStyle = eraserMode ? "red" : "black";
-        context.lineWidth = 1;
-        context.stroke();
-    }
-
-    // Mouse Events (desktop)
-    let leftMouseDown = false,
-    rightMouseDown = false;
-
-    canvas.addEventListener('mousedown', (event) => {
-        if (event.button === 0)
-            leftMouseDown = true;
-        if (event.button === 2)
-            rightMouseDown = true;
-        cursorX = prevCursorX = event.offsetX;
-        cursorY = prevCursorY = event.offsetY;
-    });
-
-    canvas.addEventListener('mousemove', (event) => {
-        cursorX = event.offsetX;
-        cursorY = event.offsetY;
-
-        if (leftMouseDown) {
-            if (panMode) {
-                offsetX += (cursorX - prevCursorX) / scale;
-                offsetY += (cursorY - prevCursorY) / scale;
-                redrawCanvas();
-            } else {
-                const scaledX = toTrueX(cursorX);
-                const scaledY = toTrueY(cursorY);
-                const prevScaledX = toTrueX(prevCursorX);
-                const prevScaledY = toTrueY(prevCursorY);
-
-                if (eraserMode) {
-                    const eraserRadius = (brushSize / scale) * 2; // Ensure the eraser size matches zoom
-
-                    for (let i = drawings.length - 1; i >= 0; i--) {
-                        let d = drawings[i];
-                        if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, eraserRadius)) {
-                            drawings.splice(i, 1);
-                        }
-                    }
-                    window.whiteboardData[channel] = drawings;
-                    redrawCanvas();
-                } else {
-                    drawings.push({
-                        x0: prevScaledX,
-                        y0: prevScaledY,
-                        x1: scaledX,
-                        y1: scaledY,
-                        color: brushColor,
-                        size: brushSize
-                    });
-                    drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
-                }
-            }
-        }
-
-        prevCursorX = cursorX;
-        prevCursorY = cursorY;
-
-        drawCursorCircle(); // Draw the cursor preview
-    });
-
-    canvas.addEventListener('mouseup', () => {
-        leftMouseDown = false;
-        rightMouseDown = false;
-    });
-
-    function drawLine(x0, y0, x1, y1, color, size) {
-        context.beginPath();
-        context.moveTo(x0, y0);
-        context.lineTo(x1, y1);
-        context.strokeStyle = color;
-        context.lineWidth = size;
-        context.lineCap = "round";
-        context.stroke();
-    }
-
-    function isNearLine(x0, y0, x1, y1, px, py, threshold) {
-        const A = px - x0;
-        const B = py - y0;
-        const C = x1 - x0;
-        const D = y1 - y0;
-
-        const dot = A * C + B * D;
-        const lenSq = C * C + D * D;
-        let param = lenSq !== 0 ? dot / lenSq : -1;
-
-        let nearestX,
-        nearestY;
-        if (param < 0) {
-            nearestX = x0;
-            nearestY = y0;
-        } else if (param > 1) {
-            nearestX = x1;
-            nearestY = y1;
-        } else {
-            nearestX = x0 + param * C;
-            nearestY = y0 + param * D;
-        }
-
-        const dist = Math.hypot(px - nearestX, py - nearestY);
-        return dist <= threshold;
-    }
-
-    // --- Updated Touch Events for Mobile ---
-    // In mobile, only one-finger touch is used.
-    // When Pan Mode is active, one-finger moves pan the canvas.
-    // Otherwise, one-finger touch draws/erases.
-    // --- Updated Touch Events for Mobile ---
-    const prevTouches = [null];
-
-    canvas.addEventListener('touchstart', (event) => {
-        // Always store the first touch only; ignore extra touches.
-        if (event.touches.length > 0) {
-            prevTouches[0] = event.touches[0];
-        }
-    });
-
-    canvas.addEventListener('touchmove', (event) => {
-        event.preventDefault(); // Prevent scrolling
-        const rect = canvas.getBoundingClientRect();
-
-        if (event.touches.length !== 1)
-            return;
-
-        const touch = event.touches[0];
-        cursorX = touch.clientX - rect.left; // Update cursorX with touch position
-        cursorY = touch.clientY - rect.top; // Update cursorY with touch position
-
+    canvas.addEventListener("mousemove", e => {
+      cursorX = e.offsetX; cursorY = e.offsetY;
+      if (leftMouseDown) {
         if (panMode) {
-            const prevTouch = prevTouches[0];
-            const prevTouchX = prevTouch.clientX - rect.left;
-            const prevTouchY = prevTouch.clientY - rect.top;
-            offsetX += (cursorX - prevTouchX) / scale;
-            offsetY += (cursorY - prevTouchY) / scale;
-            redrawCanvas();
-            window.whiteboardPanZoomData[channel] = {
-                offsetX,
-                offsetY,
-                scale
-            };
-            prevTouches[0] = touch;
+          offsetX += (cursorX - prevCursorX) / scale;
+          offsetY += (cursorY - prevCursorY) / scale;
+          redrawCanvas();
         } else {
-            const scaledX = toTrueX(cursorX);
-            const scaledY = toTrueY(cursorY);
-            const prevTouch = prevTouches[0];
-            const prevTouchX = prevTouch.clientX - rect.left;
-            const prevTouchY = prevTouch.clientY - rect.top;
-            const prevScaledX = toTrueX(prevTouchX);
-            const prevScaledY = toTrueY(prevTouchY);
-
-            if (eraserMode) {
-                const eraserRadius = (brushSize / scale) * 2;
-                for (let i = drawings.length - 1; i >= 0; i--) {
-                    let d = drawings[i];
-                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, eraserRadius)) {
-                        drawings.splice(i, 1);
-                    }
-                }
-                window.whiteboardData[channel] = drawings;
-                redrawCanvas();
-            } else {
-                drawings.push({
-                    x0: prevScaledX,
-                    y0: prevScaledY,
-                    x1: scaledX,
-                    y1: scaledY,
-                    color: brushColor,
-                    size: brushSize
-                });
-                drawLine(prevTouchX, prevTouchY, cursorX, cursorY, brushColor, brushSize);
-                window.whiteboardData[channel] = drawings;
-            }
-            prevTouches[0] = touch;
+          const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
+                psx = toTrueX(prevCursorX), psy = toTrueY(prevCursorY);
+          if (eraserMode) {
+            for (let i = drawings.length - 1; i >= 0; i--)
+              if (isNearLine(drawings[i].x0, drawings[i].y0, drawings[i].x1, drawings[i].y1, sx, sy, (brushSize / scale) * 2))
+                drawings.splice(i, 1);
+            window.whiteboardData[channel] = drawings; redrawCanvas();
+          } else {
+            drawings.push({ x0: psx, y0: psy, x1: sx, y1: sy, color: brushColor, size: brushSize });
+            drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
+          }
         }
-
-        drawCursorCircle(); // Ensure the circle preview updates on touch
+      }
+      prevCursorX = cursorX; prevCursorY = cursorY; drawCursorCircle();
     });
-
-    canvas.addEventListener('touchend', (event) => {
-        if (event.touches.length === 0) {
-            prevTouches[0] = null;
+    canvas.addEventListener("mouseup", () => leftMouseDown = false);
+    const prevTouches = [null];
+    canvas.addEventListener("touchstart", e => { if (e.touches.length) prevTouches[0] = e.touches[0]; });
+    canvas.addEventListener("touchmove", e => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      cursorX = touch.clientX - rect.left; cursorY = touch.clientY - rect.top;
+      if (panMode) {
+        const prevTouch = prevTouches[0],
+              prevTouchX = prevTouch.clientX - rect.left, prevTouchY = prevTouch.clientY - rect.top;
+        offsetX += (cursorX - prevTouchX) / scale;
+        offsetY += (cursorY - prevTouchY) / scale; redrawCanvas();
+        whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+        prevTouches[0] = touch;
+      } else {
+        const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
+              prevTouch = prevTouches[0],
+              prevTouchX = prevTouch.clientX - rect.left, prevTouchY = prevTouch.clientY - rect.top,
+              psx = toTrueX(prevTouchX), psy = toTrueY(prevTouchY);
+        if (eraserMode) {
+          for (let i = drawings.length - 1; i >= 0; i--)
+            if (isNearLine(drawings[i].x0, drawings[i].y0, drawings[i].x1, drawings[i].y1, sx, sy, (brushSize / scale) * 2))
+              drawings.splice(i, 1);
+          window.whiteboardData[channel] = drawings; redrawCanvas();
+        } else {
+          drawings.push({ x0: psx, y0: psy, x1: sx, y1: sy, color: brushColor, size: brushSize });
+          drawLine(prevTouchX, prevTouchY, cursorX, cursorY, brushColor, brushSize);
+          window.whiteboardData[channel] = drawings;
         }
+        prevTouches[0] = touch;
+      }
+      drawCursorCircle();
     });
-    // --- End Updated Touch Events ---
+    canvas.addEventListener("touchend", e => { if (e.touches.length === 0) prevTouches[0] = null; });
+    window.addEventListener("resize", redrawCanvas);
+    redrawCanvas();
+  };
 
-    // --- End Updated Touch Events ---
-}
-
-/***********************
- * 4. Code Runner (Full code editor, non-resizable)
- ***********************/
-function renderCodeChannel(container, channel) {
-    // Create header container with title and Save button
-    const headerContainer = document.createElement("div");
-    headerContainer.style.display = "flex";
-    headerContainer.style.justifyContent = "space-between";
-    headerContainer.style.alignItems = "center";
-
-    const header = document.createElement("h2");
-    header.textContent = "Code Runner";
-    headerContainer.appendChild(header);
-
-    const saveBtn = document.createElement("button");
-    saveBtn.textContent = "Save";
+  // 4. Code Runner – includes save, export/import, and live code execution.
+  const renderCodeChannel = (container, channel) => {
+    container.innerHTML = "";
+    const headerContainer = el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
+    headerContainer.appendChild(el("h2", {}, "Code Runner"));
+    const saveBtn = el("button", {}, "Save");
     headerContainer.appendChild(saveBtn);
     container.appendChild(headerContainer);
-
-    // Create Export and Import buttons container with an editable function name field anchored to the right
-    const ioContainer = document.createElement("div");
-    ioContainer.classList.add("toolbar");
-    ioContainer.style.margin = "10px 0";
-    ioContainer.style.display = "flex";
-    ioContainer.style.alignItems = "center";
-
-    const exportBtn = document.createElement("button");
-    exportBtn.textContent = "Export";
-    ioContainer.appendChild(exportBtn);
-
-    const importBtn = document.createElement("button");
-    importBtn.textContent = "Import";
-    ioContainer.appendChild(importBtn);
-
-    // Editable text field for function name, anchored to the right
-    const functionNameInput = document.createElement("input");
-    functionNameInput.type = "text";
-    functionNameInput.placeholder = "Function Name..";
-    functionNameInput.style.flex = "1"; // Expand as much as possible while leaving space for buttons
-    functionNameInput.style.minWidth = "80px"; // Prevent it from becoming too small
-    functionNameInput.style.maxWidth = "calc(100% - 120px)";
-    ioContainer.appendChild(functionNameInput);
-
-    container.appendChild(ioContainer);
-
-    // Create code editor wrapper
-    const wrapper = document.createElement("div");
-    wrapper.classList.add("code-runner-wrapper");
-    wrapper.style.height = "calc(100% - 40px)";
-    wrapper.style.position = "relative";
-    container.appendChild(wrapper);
-
-    // Run button and code area
-    const runBtn = document.createElement("button");
-    runBtn.textContent = "Run Code";
-    runBtn.classList.add("run-btn");
-    wrapper.appendChild(runBtn);
-
-    const codeArea = document.createElement("textarea");
-    codeArea.classList.add("code-runner-textarea");
-    codeArea.style.boxSizing = "border-box";
-    codeArea.style.resize = "none";
-    wrapper.appendChild(codeArea);
-
-    // Initialize or load existing code
-    if (window.codeData[channel.id]) {
-        codeArea.value = window.codeData[channel.id];
-    }
-
-    codeArea.addEventListener("input", () => {
-        window.codeData[channel.id] = codeArea.value;
-    });
-
-    // Output div for code execution results
-    const outputDiv = document.createElement("div");
-    outputDiv.classList.add("code-runner-output");
-    wrapper.appendChild(outputDiv);
-
-    // Code execution handler
-    runBtn.addEventListener("click", () => {
-        const code = codeArea.value;
-        const logs = [];
-        const originalConsoleLog = console.log;
-
-        console.log = function (...args) {
-            logs.push(args.join(" "));
-            originalConsoleLog.apply(console, args);
-        };
-
+    const ioContainer = el("div", { class: "toolbar", style: { margin: "10px 0", display: "flex", alignItems: "center" } });
+    ioContainer.appendChild(el("button", { onclick: () => {
+      const funcCat = categories.find(c => c.name === "Functions");
+      if (!funcCat?.channels?.length) return;
+      const blob = new Blob([JSON.stringify(funcCat.channels, null, 2)], { type: "application/json" });
+      el("a", { href: URL.createObjectURL(blob), download: "code_functions.json" }).click();
+    } }, "Export"));
+    ioContainer.appendChild(el("button", { onclick: () => {
+      const importInput = el("input", { type: "file", accept: "application/json", style: { display: "none" } });
+      importInput.addEventListener("change", async e => {
+        const file = e.target.files[0]; if (!file) return;
+        const fileObj = await readFile(file);
         try {
-            const result = eval(code);
-            let outputText = logs.length > 0
-                 ? logs.join("\n")
-                 : (result !== undefined ? result : "Code executed successfully.");
-            outputDiv.textContent = outputText;
-        } catch (error) {
-            outputDiv.textContent = "Error: " + error;
-        }
-        console.log = originalConsoleLog;
-    });
-
-    // When the function name input changes, update the save button text if a function with that name exists.
-    functionNameInput.addEventListener("input", () => {
-        let functionsCategory = categories.find(cat => cat.name === "Functions");
-        if (functionsCategory) {
-            const existingFunction = functionsCategory.channels.find(ch =>
-                    ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase());
-            saveBtn.textContent = existingFunction ? "Update" : "Save";
-        } else {
-            saveBtn.textContent = "Save";
-        }
-    });
-
-    // Save/Update functionality
-    saveBtn.addEventListener("click", () => {
-        const code = codeArea.value;
-        if (!code.trim()) {
-            // Do not save empty code.
-            return;
-        }
-
-        // Ensure Functions category exists
-        let functionsCategory = categories.find(cat => cat.name === "Functions");
-        if (!functionsCategory) {
-            functionsCategory = {
-                name: "Functions",
-                channels: []
-            };
-            categories.push(functionsCategory);
-        }
-
-        let enteredName = functionNameInput.value.trim();
-        if (enteredName === "") {
-            // Default name if none provided.
-            enteredName = "Saved Function " + (functionsCategory.channels.length + 1);
-        }
-
-        // Check if a function with that name already exists (case-insensitive)
-        const existingIndex = functionsCategory.channels.findIndex(ch =>
-                ch.name.toLowerCase() === enteredName.toLowerCase());
-        if (existingIndex !== -1) {
-            // Update existing function
-            functionsCategory.channels[existingIndex].code = code;
-        } else {
-            // Create new function entry with a unique id
-            const funcId = "func_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-            const newFuncChannel = {
-                id: funcId,
-                name: enteredName,
-                type: "function",
-                code: code
-            };
-            functionsCategory.channels.push(newFuncChannel);
-        }
-        renderSidebar();
-        // Clear the function name input and reset save button text
-        functionNameInput.value = "";
-        saveBtn.textContent = "Save";
-    });
-
-    // Export functionality
-    exportBtn.addEventListener("click", () => {
-        let functionsCategory = categories.find(cat => cat.name === "Functions");
-        if (!functionsCategory?.channels?.length) {
-            return;
-        }
-
-        const data = functionsCategory.channels;
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], {
-            type: "application/json"
-        });
-        const url = URL.createObjectURL(blob);
-
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "code_functions.json";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    });
-
-    // Import functionality (replace by name)
-    importBtn.addEventListener("click", () => {
-        const importInput = document.createElement("input");
-        importInput.type = "file";
-        importInput.accept = "application/json";
-        importInput.style.display = "none";
-
-        importInput.addEventListener("change", (e) => {
-            const file = e.target.files[0];
-            if (!file)
-                return;
-
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const importedData = JSON.parse(event.target.result);
-                    if (!Array.isArray(importedData)) {
-                        return;
-                    }
-
-                    let functionsCategory = categories.find(cat => cat.name === "Functions");
-                    if (!functionsCategory) {
-                        functionsCategory = {
-                            name: "Functions",
-                            channels: []
-                        };
-                        categories.push(functionsCategory);
-                    }
-
-                    // For each imported function, replace an existing one with the same name (case-insensitive) or add new
-                    importedData.forEach(importedFunc => {
-                        const existingIndex = functionsCategory.channels.findIndex(ch =>
-                                ch.name.toLowerCase() === importedFunc.name.toLowerCase());
-                        if (existingIndex !== -1) {
-                            functionsCategory.channels[existingIndex] = importedFunc;
-                        } else {
-                            functionsCategory.channels.push(importedFunc);
-                        }
-                    });
-                    renderSidebar();
-                } catch (err) {
-                    // Handle errors if needed
-                }
-            };
-            reader.readAsText(file);
-        });
-        importInput.click();
-    });
-}
-
-/***********************
- * 5. Reminders Channel
- ***********************/
-function renderReminderChannel(container, channel) {
-    const header = document.createElement("h2");
-    header.textContent = "Reminders";
-    container.appendChild(header);
-
-    // Contrast calculation function
-    function getContrastingTextColor(bgColor) {
-        const parseColor = (colorStr) => {
-            colorStr = colorStr.trim().toLowerCase();
-            if (colorStr.startsWith('#')) {
-                let hex = colorStr.slice(1);
-                if ([3, 4].includes(hex.length)) {
-                    hex = hex.split('').map(c => c + c).join('');
-                }
-                return {
-                    r: parseInt(hex.substring(0, 2), 16),
-                    g: parseInt(hex.substring(2, 4), 16),
-                    b: parseInt(hex.substring(4, 6), 16)
-                };
-            }
-            if (colorStr.startsWith('rgb')) {
-                const parts = colorStr.match(/(\d+)/g) || [];
-                return {
-                    r: parseInt(parts[0]) || 0,
-                    g: parseInt(parts[1]) || 0,
-                    b: parseInt(parts[2]) || 0
-                };
-            }
-            return {
-                r: 255,
-                g: 255,
-                b: 255
-            };
-        };
-
-        const calculateLuminance = (r, g, b) => {
-            const srgbToLinear = (c) => {
-                c /= 255;
-                return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-            };
-            return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
-        };
-
-        const {
-            r,
-            g,
-            b
-        } = parseColor(bgColor);
-        return calculateLuminance(r, g, b) > 0.179 ? '#000000' : '#ffffff';
-    }
-
-    // Ensure reminders storage exists
-    if (!reminders[channel.id]) {
-        reminders[channel.id] = [];
-    }
-
-    // List of reminders
-    const listDiv = document.createElement("div");
-    container.appendChild(listDiv);
-
-    function renderReminders() {
-        listDiv.innerHTML = "";
-        reminders[channel.id].forEach((reminder, index) => {
-            const reminderDiv = document.createElement("div");
-            reminderDiv.classList.add("reminder-container");
-
-            // Set background and calculated text color
-            reminderDiv.style.backgroundColor = reminder.color;
-            const textColor = getContrastingTextColor(reminder.color);
-            reminderDiv.style.color = textColor;
-
-            reminderDiv.style.padding = "10px";
-            reminderDiv.style.margin = "5px 0";
-            reminderDiv.style.borderRadius = "4px";
-
-            if (reminder.date) {
-                const dateDiv = document.createElement("div");
-                dateDiv.textContent = new Date(reminder.date).toLocaleString();
-                reminderDiv.appendChild(dateDiv);
-            }
-
-            const textDiv = document.createElement("div");
-            textDiv.textContent = reminder.text;
-            reminderDiv.appendChild(textDiv);
-
-            const removeBtn = document.createElement("button");
-            removeBtn.textContent = "Remove";
-            removeBtn.addEventListener("click", () => {
-                reminders[channel.id].splice(index, 1);
-                renderReminders();
+          const imported = JSON.parse(fileObj.content);
+          if (Array.isArray(imported)) {
+            let funcCat = categories.find(c => c.name === "Functions");
+            if (!funcCat) { funcCat = { name: "Functions", channels: [] }; categories.push(funcCat); }
+            imported.forEach(imp => {
+              const idx = funcCat.channels.findIndex(ch => ch.name.toLowerCase() === imp.name.toLowerCase());
+              idx !== -1 ? funcCat.channels[idx] = imp : funcCat.channels.push(imp);
             });
-            reminderDiv.appendChild(removeBtn);
-            listDiv.appendChild(reminderDiv);
-        });
-    }
-    renderReminders();
-
-    // Add reminder form
-    const form = document.createElement("form");
-
-    // Date input
-    const dateInput = document.createElement("input");
-    dateInput.type = "datetime-local";
-    form.appendChild(dateInput);
-
-    // Text input
-    const textInput = document.createElement("input");
-    textInput.type = "text";
-    textInput.placeholder = "Reminder text";
-    textInput.required = true;
-    form.appendChild(textInput);
-
-    // Color picker
-    const colorInput = document.createElement("input");
-    colorInput.type = "color";
-    colorInput.value = "#007bff";
-    colorInput.style.marginLeft = "10px";
-    form.appendChild(colorInput);
-
-    // Submit button
-    const addBtn = document.createElement("button");
-    addBtn.type = "submit";
-    addBtn.textContent = "Add Reminder";
-    form.appendChild(addBtn);
-
-    form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        const newReminder = {
-            date: dateInput.value || null,
-            text: textInput.value,
-            color: colorInput.value
-        };
-        reminders[channel.id].push(newReminder);
-        dateInput.value = "";
-        textInput.value = "";
-        renderReminders();
+            renderSidebar();
+          }
+        } catch {}
+      });
+      importInput.click();
+    } }, "Import"));
+    const functionNameInput = el("input", { type: "text", placeholder: "Function Name..", style: { flex: "1", minWidth: "80px", maxWidth: "calc(100% - 120px)" } });
+    ioContainer.appendChild(functionNameInput);
+    container.appendChild(ioContainer);
+    const wrapper = el("div", { class: "code-runner-wrapper", style: { height: "calc(100% - 40px)", position: "relative" } });
+    container.appendChild(wrapper);
+    const runBtn = el("button", { class: "run-btn" }, "Run Code");
+    wrapper.appendChild(runBtn);
+    const codeArea = el("textarea", { class: "code-runner-textarea", style: { boxSizing: "border-box", resize: "none" } });
+    wrapper.appendChild(codeArea);
+    if (window.codeData[channel.id]) codeArea.value = window.codeData[channel.id];
+    codeArea.addEventListener("input", () => window.codeData[channel.id] = codeArea.value);
+    const outputDiv = el("div", { class: "code-runner-output" });
+    wrapper.appendChild(outputDiv);
+    runBtn.addEventListener("click", () => {
+      const code = codeArea.value, logs = [];
+      const origLog = console.log;
+      console.log = (...args) => { logs.push(args.join(" ")); origLog(...args); };
+      try {
+        const result = eval(code);
+        outputDiv.textContent = logs.length ? logs.join("\n") : (result !== undefined ? result : "Code executed successfully.");
+      } catch (err) { outputDiv.textContent = "Error: " + err; }
+      console.log = origLog;
     });
-    container.appendChild(form);
-}
+    functionNameInput.addEventListener("input", () => {
+      const funcCat = categories.find(c => c.name === "Functions");
+      saveBtn.textContent = (funcCat && funcCat.channels.find(ch => ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase()))
+        ? "Update" : "Save";
+    });
+    saveBtn.addEventListener("click", () => {
+      const code = codeArea.value;
+      if (!code.trim()) return;
+      let funcCat = categories.find(c => c.name === "Functions");
+      if (!funcCat) { funcCat = { name: "Functions", channels: [] }; categories.push(funcCat); }
+      let name = functionNameInput.value.trim() || "Saved Function " + (funcCat.channels.length + 1);
+      const idx = funcCat.channels.findIndex(ch => ch.name.toLowerCase() === name.toLowerCase());
+      if (idx !== -1) funcCat.channels[idx].code = code;
+      else {
+        const id = "func_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+        funcCat.channels.push({ id, name, type: "function", code });
+      }
+      renderSidebar(); functionNameInput.value = ""; saveBtn.textContent = "Save";
+    });
+  };
 
-/***********************
- * Initialize on DOM Ready
- ***********************/
-document.addEventListener("DOMContentLoaded", () => {
+  // 5. Reminders – includes dynamic contrast calculation.
+  const renderReminderChannel = (container, channel) => {
+    container.innerHTML = "";
+    container.appendChild(el("h2", {}, "Reminders"));
+    const getContrastingTextColor = bg => {
+      const parse = c => {
+        c = c.trim().toLowerCase();
+        if (c.startsWith('#')) {
+          let hex = c.slice(1);
+          if ([3, 4].includes(hex.length)) hex = hex.split('').map(ch => ch + ch).join('');
+          return { r: parseInt(hex.substr(0, 2), 16), g: parseInt(hex.substr(2, 2), 16), b: parseInt(hex.substr(4, 2), 16) };
+        }
+        if (c.startsWith("rgb")) {
+          const parts = c.match(/(\d+)/g) || [];
+          return { r: +parts[0] || 0, g: +parts[1] || 0, b: +parts[2] || 0 };
+        }
+        return { r: 255, g: 255, b: 255 };
+      };
+      const { r, g, b } = parse(bg);
+      const lum = (r, g, b) => { const f = c => (c /= 255) <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+      return lum(r, g, b) > 0.179 ? "#000000" : "#ffffff";
+    };
+    reminders[channel.id] = reminders[channel.id] || [];
+    const listDiv = el("div");
+    container.appendChild(listDiv);
+    const renderReminders = () => {
+      listDiv.innerHTML = "";
+      reminders[channel.id].forEach((rem, idx) => {
+        const remDiv = el("div", { class: "reminder-container", style: { backgroundColor: rem.color, color: getContrastingTextColor(rem.color), padding: "10px", margin: "5px 0", borderRadius: "4px" } });
+        if (rem.date) remDiv.appendChild(el("div", {}, new Date(rem.date).toLocaleString()));
+        remDiv.appendChild(el("div", {}, rem.text));
+        remDiv.appendChild(el("button", { onclick: () => { reminders[channel.id].splice(idx, 1); renderReminders(); } }, "Remove"));
+        listDiv.appendChild(remDiv);
+      });
+    };
+    renderReminders();
+    const form = el("form", { onsubmit: e => {
+      e.preventDefault();
+      reminders[channel.id].push({ date: dateInput.value || null, text: textInput.value, color: colorInput.value });
+      dateInput.value = ""; textInput.value = ""; renderReminders();
+    }});
+    const dateInput = el("input", { type: "datetime-local" });
+    const textInput = el("input", { type: "text", placeholder: "Reminder text", required: true });
+    const colorInput = el("input", { type: "color", value: "#007bff", style: { marginLeft: "10px" } });
+    form.append(dateInput, textInput, colorInput, el("button", { type: "submit" }, "Add Reminder"));
+    container.appendChild(form);
+  };
+
+  // Initialize on DOM ready.
+  document.addEventListener("DOMContentLoaded", () => {
     renderSidebar();
-    if (categories.length > 0 && categories[0].channels.length > 0) {
-        selectChannel(categories[0].channels[0]);
-    }
-});
+    if (categories.length && categories[0].channels.length)
+      selectChannel(categories[0].channels[0]);
+  });
+})();
