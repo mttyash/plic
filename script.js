@@ -112,7 +112,7 @@ function renderSidebar() {
     // Version text
     const versionText = document.createElement("div");
     versionText.classList.add("version-text");
-    versionText.textContent = "v1.11";
+    versionText.textContent = "v1.12";
     sidebar.appendChild(versionText);
 
     // Collapse sidebar when clicking outside
@@ -274,7 +274,7 @@ function renderTextChannel(container, channel) {
             msgContainer.appendChild(contentDiv);
 
             const btnContainer = document.createElement("div");
-			btnContainer.classList.add("toolbar");
+            btnContainer.classList.add("toolbar");
             const editBtn = document.createElement("button");
             editBtn.textContent = "Edit";
             const removeBtn = document.createElement("button");
@@ -377,13 +377,13 @@ function renderTextChannel(container, channel) {
     updateMessages();
 
     const footerDiv = document.createElement("div");
-	footerDiv.classList.add("toolbar");
+    footerDiv.classList.add("toolbar");
     const textInput = document.createElement("input");
     textInput.type = "text";
     textInput.placeholder = "Type a message...";
-	textInput.style.flex = "1";
-	textInput.style.minWidth = "100px";
-	textInput.style.maxWidth = "calc(100% - 120px)";
+    textInput.style.flex = "1";
+    textInput.style.minWidth = "100px";
+    textInput.style.maxWidth = "calc(100% - 120px)";
 
     footerDiv.appendChild(textInput);
     const attachBtn = document.createElement("button");
@@ -514,12 +514,12 @@ function renderFlashcardChannel(container, channel) {
         row.classList.add("answer-row");
         const answerInput = document.createElement("input");
         answerInput.type = "text";
-		answerInput.placeholder = "Answer";
-		answerInput.required = true;
-		answerInput.value = defaultText;
-		answerInput.style.flex = "1";
-		answerInput.style.minWidth = "80px";
-		answerInput.style.maxWidth = "calc(100% - 120px)";
+        answerInput.placeholder = "Answer";
+        answerInput.required = true;
+        answerInput.value = defaultText;
+        answerInput.style.flex = "1";
+        answerInput.style.minWidth = "80px";
+        answerInput.style.maxWidth = "calc(100% - 120px)";
         row.appendChild(answerInput);
         const correctToggle = document.createElement("input");
         correctToggle.type = "checkbox";
@@ -645,7 +645,7 @@ function renderFlashcardChannel(container, channel) {
             cardDiv.appendChild(answersList);
 
             const btnContainer = document.createElement("div");
-			btnContainer.classList.add("toolbar");
+            btnContainer.classList.add("toolbar");
 
             const editBtn = document.createElement("button");
             editBtn.textContent = "Edit";
@@ -869,11 +869,11 @@ function renderWhiteboardChannel(container, channel) {
     container.appendChild(header);
 
     // Create toolbar
-	const toolbar = document.createElement("div");
-	toolbar.classList.add("toolbar");
-	toolbar.style.display = "flex";
-	toolbar.style.gap = "10px";
-	toolbar.style.marginBottom = "10px";
+    const toolbar = document.createElement("div");
+    toolbar.classList.add("toolbar");
+    toolbar.style.display = "flex";
+    toolbar.style.gap = "10px";
+    toolbar.style.marginBottom = "10px";
 
     // Color Picker
     const colorPicker = document.createElement("input");
@@ -935,12 +935,23 @@ function renderWhiteboardChannel(container, channel) {
         window.whiteboardPanZoomData = {};
     }
     if (!window.whiteboardPanZoomData[channel]) {
-        window.whiteboardPanZoomData[channel] = { offsetX: 0, offsetY: 0, scale: 1 };
+        window.whiteboardPanZoomData[channel] = {
+            offsetX: 0,
+            offsetY: 0,
+            scale: 1
+        };
     }
-    let { offsetX, offsetY, scale } = window.whiteboardPanZoomData[channel];
+    let {
+        offsetX,
+        offsetY,
+        scale
+    } = window.whiteboardPanZoomData[channel];
 
     // Cursor position
-    let cursorX, cursorY, prevCursorX, prevCursorY;
+    let cursorX,
+    cursorY,
+    prevCursorX,
+    prevCursorY;
 
     // Brush settings
     let brushColor = "#000000";
@@ -952,9 +963,10 @@ function renderWhiteboardChannel(container, channel) {
 
     // Event listeners for controls
     colorPicker.addEventListener("input", () => {
-        brushColor = colorPicker.value;
-        eraserMode = false;
-    });
+		brushColor = colorPicker.value;
+		eraserMode = false;  // Ensure eraser mode is turned off when a new color is selected
+		eraserButton.style.backgroundColor = "";  // Remove red background from eraser button
+	});
 
     sizeSlider.addEventListener("input", () => {
         brushSize = parseInt(sizeSlider.value, 10);
@@ -973,7 +985,7 @@ function renderWhiteboardChannel(container, channel) {
 
     // Zoom In button (zooming centered on canvas center)
     zoomInButton.addEventListener("click", () => {
-        const factor = 1.1;
+        const factor = 1.25;
         const newScale = scale * factor;
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
@@ -982,12 +994,16 @@ function renderWhiteboardChannel(container, channel) {
         offsetY = offsetY + cy * (1 / newScale - 1 / scale);
         scale = newScale;
         redrawCanvas();
-        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+        window.whiteboardPanZoomData[channel] = {
+            offsetX,
+            offsetY,
+            scale
+        };
     });
 
     // Zoom Out button (zooming centered on canvas center)
     zoomOutButton.addEventListener("click", () => {
-        const factor = 1.1;
+        const factor = 1.5;
         const newScale = scale / factor;
         const cx = canvas.width / 2;
         const cy = canvas.height / 2;
@@ -995,7 +1011,11 @@ function renderWhiteboardChannel(container, channel) {
         offsetY = offsetY + cy * (1 / newScale - 1 / scale);
         scale = newScale;
         redrawCanvas();
-        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+        window.whiteboardPanZoomData[channel] = {
+            offsetX,
+            offsetY,
+            scale
+        };
     });
 
     // Convert coordinates
@@ -1026,17 +1046,74 @@ function renderWhiteboardChannel(container, channel) {
         context.fillStyle = '#fff';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
+        // Draw previous drawings
         for (let i = 0; i < drawings.length; i++) {
             const line = drawings[i];
             drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
         }
+
+        // Draw zoom anchor dot at the center
+        drawZoomAnchorDot();
     }
+
+    function drawZoomAnchorDot() {
+        // Calculate the center of the canvas based on the current zoom and offset
+        const centerX = (canvas.width / 2);
+        const centerY = (canvas.height / 2);
+
+        // Set the size of the cross
+        const crossSize = 20;
+
+        // Save the current drawing context state
+        context.save();
+
+        // Set the global composite operation to 'difference' to invert the colors under the cross
+        context.globalCompositeOperation = 'difference';
+
+        // Draw vertical line of the cross
+        context.beginPath();
+        context.moveTo(centerX, centerY - crossSize / 2);
+        context.lineTo(centerX, centerY + crossSize / 2);
+        context.strokeStyle = 'white'; // White color to apply the 'difference' effect
+        context.lineWidth = 1;
+        context.stroke();
+
+        // Draw horizontal line of the cross
+        context.beginPath();
+        context.moveTo(centerX - crossSize / 2, centerY);
+        context.lineTo(centerX + crossSize / 2, centerY);
+        context.strokeStyle = 'white'; // White color to apply the 'difference' effect
+        context.lineWidth = 2;
+        context.stroke();
+
+        // Restore the drawing context to remove the 'difference' mode for other drawing operations
+        context.restore();
+    }
+
     redrawCanvas();
 
     window.addEventListener("resize", () => redrawCanvas());
 
+    function drawCursorCircle() {
+        redrawCanvas(); // Prevents trails
+
+        // Use actual screen coordinates for the cursor position
+        const cursorScreenX = cursorX;
+        const cursorScreenY = cursorY;
+
+        // Keep cursor size fixed relative to the screen
+        const displaySize = eraserMode ? brushSize * 3 : brushSize; // Match eraser effect size
+
+        context.beginPath();
+        context.arc(cursorScreenX, cursorScreenY, displaySize / 2, 0, Math.PI * 2);
+        context.strokeStyle = eraserMode ? "red" : "black";
+        context.lineWidth = 1;
+        context.stroke();
+    }
+
     // Mouse Events (desktop)
-    let leftMouseDown = false, rightMouseDown = false;
+    let leftMouseDown = false,
+    rightMouseDown = false;
 
     canvas.addEventListener('mousedown', (event) => {
         if (event.button === 0)
@@ -1053,76 +1130,49 @@ function renderWhiteboardChannel(container, channel) {
 
         if (leftMouseDown) {
             if (panMode) {
-                // Left‑drag panning when Pan Mode is active
                 offsetX += (cursorX - prevCursorX) / scale;
                 offsetY += (cursorY - prevCursorY) / scale;
                 redrawCanvas();
-                window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
             } else {
-                // Drawing/erasing when Pan Mode is off
                 const scaledX = toTrueX(cursorX);
                 const scaledY = toTrueY(cursorY);
                 const prevScaledX = toTrueX(prevCursorX);
                 const prevScaledY = toTrueY(prevCursorY);
 
                 if (eraserMode) {
-                    // Eraser: remove strokes near the current true coordinate
+                    const eraserRadius = (brushSize / scale) * 2; // Ensure the eraser size matches zoom
+
                     for (let i = drawings.length - 1; i >= 0; i--) {
                         let d = drawings[i];
-                        if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                        if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, eraserRadius)) {
                             drawings.splice(i, 1);
                         }
                     }
                     window.whiteboardData[channel] = drawings;
                     redrawCanvas();
                 } else {
-                    const newLine = {
+                    drawings.push({
                         x0: prevScaledX,
                         y0: prevScaledY,
                         x1: scaledX,
                         y1: scaledY,
                         color: brushColor,
                         size: brushSize
-                    };
-                    drawings.push(newLine);
-                    window.whiteboardData[channel] = drawings;
+                    });
                     drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
                 }
             }
         }
 
-        if (rightMouseDown) {
-            // Right‑drag panning (always available)
-            offsetX += (cursorX - prevCursorX) / scale;
-            offsetY += (cursorY - prevCursorY) / scale;
-            redrawCanvas();
-            window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-        }
-
         prevCursorX = cursorX;
         prevCursorY = cursorY;
+
+        drawCursorCircle(); // Draw the cursor preview
     });
 
     canvas.addEventListener('mouseup', () => {
         leftMouseDown = false;
         rightMouseDown = false;
-    });
-
-    canvas.addEventListener('wheel', (event) => {
-        const deltaY = event.deltaY;
-        const scaleAmount = -deltaY / 500;
-        scale *= (1 + scaleAmount);
-
-        const distX = event.offsetX / canvas.width;
-        const distY = event.offsetY / canvas.height;
-        const unitsZoomedX = trueWidth() * scaleAmount;
-        const unitsZoomedY = trueHeight() * scaleAmount;
-
-        offsetX -= unitsZoomedX * distX;
-        offsetY -= unitsZoomedY * distY;
-        redrawCanvas();
-        // Persist pan/zoom state
-        window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
     });
 
     function drawLine(x0, y0, x1, y1, color, size) {
@@ -1145,7 +1195,8 @@ function renderWhiteboardChannel(container, channel) {
         const lenSq = C * C + D * D;
         let param = lenSq !== 0 ? dot / lenSq : -1;
 
-        let nearestX, nearestY;
+        let nearestX,
+        nearestY;
         if (param < 0) {
             nearestX = x0;
             nearestY = y0;
@@ -1165,6 +1216,7 @@ function renderWhiteboardChannel(container, channel) {
     // In mobile, only one-finger touch is used.
     // When Pan Mode is active, one-finger moves pan the canvas.
     // Otherwise, one-finger touch draws/erases.
+    // --- Updated Touch Events for Mobile ---
     const prevTouches = [null];
 
     canvas.addEventListener('touchstart', (event) => {
@@ -1177,27 +1229,30 @@ function renderWhiteboardChannel(container, channel) {
     canvas.addEventListener('touchmove', (event) => {
         event.preventDefault(); // Prevent scrolling
         const rect = canvas.getBoundingClientRect();
-        // Ignore multi-touch gestures entirely.
-        if (event.touches.length !== 1) return;
+
+        if (event.touches.length !== 1)
+            return;
 
         const touch = event.touches[0];
-        const touchX = touch.clientX - rect.left;
-        const touchY = touch.clientY - rect.top;
+        cursorX = touch.clientX - rect.left; // Update cursorX with touch position
+        cursorY = touch.clientY - rect.top; // Update cursorY with touch position
 
         if (panMode) {
-            // Pan mode: use one finger to pan the canvas.
             const prevTouch = prevTouches[0];
             const prevTouchX = prevTouch.clientX - rect.left;
             const prevTouchY = prevTouch.clientY - rect.top;
-            offsetX += (touchX - prevTouchX) / scale;
-            offsetY += (touchY - prevTouchY) / scale;
+            offsetX += (cursorX - prevTouchX) / scale;
+            offsetY += (cursorY - prevTouchY) / scale;
             redrawCanvas();
-            window.whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+            window.whiteboardPanZoomData[channel] = {
+                offsetX,
+                offsetY,
+                scale
+            };
             prevTouches[0] = touch;
         } else {
-            // Drawing/erasing mode with one finger.
-            const scaledX = toTrueX(touchX);
-            const scaledY = toTrueY(touchY);
+            const scaledX = toTrueX(cursorX);
+            const scaledY = toTrueY(cursorY);
             const prevTouch = prevTouches[0];
             const prevTouchX = prevTouch.clientX - rect.left;
             const prevTouchY = prevTouch.clientY - rect.top;
@@ -1205,9 +1260,10 @@ function renderWhiteboardChannel(container, channel) {
             const prevScaledY = toTrueY(prevTouchY);
 
             if (eraserMode) {
+                const eraserRadius = (brushSize / scale) * 2;
                 for (let i = drawings.length - 1; i >= 0; i--) {
                     let d = drawings[i];
-                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, brushSize * 2)) {
+                    if (isNearLine(d.x0, d.y0, d.x1, d.y1, scaledX, scaledY, eraserRadius)) {
                         drawings.splice(i, 1);
                     }
                 }
@@ -1222,11 +1278,13 @@ function renderWhiteboardChannel(container, channel) {
                     color: brushColor,
                     size: brushSize
                 });
-                drawLine(prevTouchX, prevTouchY, touchX, touchY, brushColor, brushSize);
+                drawLine(prevTouchX, prevTouchY, cursorX, cursorY, brushColor, brushSize);
                 window.whiteboardData[channel] = drawings;
             }
             prevTouches[0] = touch;
         }
+
+        drawCursorCircle(); // Ensure the circle preview updates on touch
     });
 
     canvas.addEventListener('touchend', (event) => {
@@ -1234,6 +1292,8 @@ function renderWhiteboardChannel(container, channel) {
             prevTouches[0] = null;
         }
     });
+    // --- End Updated Touch Events ---
+
     // --- End Updated Touch Events ---
 }
 
@@ -1246,11 +1306,11 @@ function renderCodeChannel(container, channel) {
     headerContainer.style.display = "flex";
     headerContainer.style.justifyContent = "space-between";
     headerContainer.style.alignItems = "center";
-    
+
     const header = document.createElement("h2");
     header.textContent = "Code Runner";
     headerContainer.appendChild(header);
-    
+
     const saveBtn = document.createElement("button");
     saveBtn.textContent = "Save";
     headerContainer.appendChild(saveBtn);
@@ -1258,28 +1318,28 @@ function renderCodeChannel(container, channel) {
 
     // Create Export and Import buttons container with an editable function name field anchored to the right
     const ioContainer = document.createElement("div");
-	ioContainer.classList.add("toolbar");
+    ioContainer.classList.add("toolbar");
     ioContainer.style.margin = "10px 0";
     ioContainer.style.display = "flex";
     ioContainer.style.alignItems = "center";
-    
+
     const exportBtn = document.createElement("button");
     exportBtn.textContent = "Export";
     ioContainer.appendChild(exportBtn);
-    
+
     const importBtn = document.createElement("button");
     importBtn.textContent = "Import";
     ioContainer.appendChild(importBtn);
-    
+
     // Editable text field for function name, anchored to the right
     const functionNameInput = document.createElement("input");
     functionNameInput.type = "text";
     functionNameInput.placeholder = "Function Name..";
-	functionNameInput.style.flex = "1"; // Expand as much as possible while leaving space for buttons
-	functionNameInput.style.minWidth = "80px"; // Prevent it from becoming too small
-	functionNameInput.style.maxWidth = "calc(100% - 120px)";
+    functionNameInput.style.flex = "1"; // Expand as much as possible while leaving space for buttons
+    functionNameInput.style.minWidth = "80px"; // Prevent it from becoming too small
+    functionNameInput.style.maxWidth = "calc(100% - 120px)";
     ioContainer.appendChild(functionNameInput);
-    
+
     container.appendChild(ioContainer);
 
     // Create code editor wrapper
@@ -1305,7 +1365,7 @@ function renderCodeChannel(container, channel) {
     if (window.codeData[channel.id]) {
         codeArea.value = window.codeData[channel.id];
     }
-    
+
     codeArea.addEventListener("input", () => {
         window.codeData[channel.id] = codeArea.value;
     });
@@ -1320,17 +1380,17 @@ function renderCodeChannel(container, channel) {
         const code = codeArea.value;
         const logs = [];
         const originalConsoleLog = console.log;
-        
+
         console.log = function (...args) {
             logs.push(args.join(" "));
             originalConsoleLog.apply(console, args);
         };
-        
+
         try {
             const result = eval(code);
-            let outputText = logs.length > 0 
-                ? logs.join("\n") 
-                : (result !== undefined ? result : "Code executed successfully.");
+            let outputText = logs.length > 0
+                 ? logs.join("\n")
+                 : (result !== undefined ? result : "Code executed successfully.");
             outputDiv.textContent = outputText;
         } catch (error) {
             outputDiv.textContent = "Error: " + error;
@@ -1342,9 +1402,8 @@ function renderCodeChannel(container, channel) {
     functionNameInput.addEventListener("input", () => {
         let functionsCategory = categories.find(cat => cat.name === "Functions");
         if (functionsCategory) {
-            const existingFunction = functionsCategory.channels.find(ch => 
-                ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase()
-            );
+            const existingFunction = functionsCategory.channels.find(ch =>
+                    ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase());
             saveBtn.textContent = existingFunction ? "Update" : "Save";
         } else {
             saveBtn.textContent = "Save";
@@ -1362,7 +1421,10 @@ function renderCodeChannel(container, channel) {
         // Ensure Functions category exists
         let functionsCategory = categories.find(cat => cat.name === "Functions");
         if (!functionsCategory) {
-            functionsCategory = { name: "Functions", channels: [] };
+            functionsCategory = {
+                name: "Functions",
+                channels: []
+            };
             categories.push(functionsCategory);
         }
 
@@ -1373,9 +1435,8 @@ function renderCodeChannel(container, channel) {
         }
 
         // Check if a function with that name already exists (case-insensitive)
-        const existingIndex = functionsCategory.channels.findIndex(ch => 
-            ch.name.toLowerCase() === enteredName.toLowerCase()
-        );
+        const existingIndex = functionsCategory.channels.findIndex(ch =>
+                ch.name.toLowerCase() === enteredName.toLowerCase());
         if (existingIndex !== -1) {
             // Update existing function
             functionsCategory.channels[existingIndex].code = code;
@@ -1405,9 +1466,11 @@ function renderCodeChannel(container, channel) {
 
         const data = functionsCategory.channels;
         const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], { type: "application/json" });
+        const blob = new Blob([json], {
+            type: "application/json"
+        });
         const url = URL.createObjectURL(blob);
-        
+
         const link = document.createElement("a");
         link.href = url;
         link.download = "code_functions.json";
@@ -1423,10 +1486,11 @@ function renderCodeChannel(container, channel) {
         importInput.type = "file";
         importInput.accept = "application/json";
         importInput.style.display = "none";
-        
+
         importInput.addEventListener("change", (e) => {
             const file = e.target.files[0];
-            if (!file) return;
+            if (!file)
+                return;
 
             const reader = new FileReader();
             reader.onload = (event) => {
@@ -1438,15 +1502,17 @@ function renderCodeChannel(container, channel) {
 
                     let functionsCategory = categories.find(cat => cat.name === "Functions");
                     if (!functionsCategory) {
-                        functionsCategory = { name: "Functions", channels: [] };
+                        functionsCategory = {
+                            name: "Functions",
+                            channels: []
+                        };
                         categories.push(functionsCategory);
                     }
 
                     // For each imported function, replace an existing one with the same name (case-insensitive) or add new
                     importedData.forEach(importedFunc => {
                         const existingIndex = functionsCategory.channels.findIndex(ch =>
-                            ch.name.toLowerCase() === importedFunc.name.toLowerCase()
-                        );
+                                ch.name.toLowerCase() === importedFunc.name.toLowerCase());
                         if (existingIndex !== -1) {
                             functionsCategory.channels[existingIndex] = importedFunc;
                         } else {

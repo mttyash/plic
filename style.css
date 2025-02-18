@@ -1,120 +1,119 @@
 :root {
---color-primary: #2c3e50;
---color-secondary: #34495e;
---color-accent: #007bff;
---color-background: #ecf0f1;
---color-white: #ffffff;
---color-text-light: #ecf0f1;
---color-text-dark: #2c3e50;
---color-text-muted: #555555;
---color-border: #34495e;
---color-border-light: #dddddd;
---color-success-bg: #c8f7c5;
---color-error-bg: #f7c5c5;
---color-black: #000000;
---color-white-rgb: 255,255,255;
---font-family: "Segoe UI",Tahoma,Geneva,Verdana,sans-serif;
---font-size-base: 1em;
---font-size-medium: 1.2em;
---font-size-small: 0.8em;
---border-radius-small: 4px;
---border-radius-medium: 5px;
---border-radius-circle: 50%;
+    --color-primary: #2c3e50;
+    --color-secondary: #34495e;
+    --color-accent: #007bff;
+    --color-background: #ecf0f1;
+    --color-white: #ffffff;
+    --color-text-light: #ecf0f1;
+    --color-text-dark: #2c3e50;
+    --color-text-muted: #555555;
+    --color-border: #34495e;
+    --color-border-light: #dddddd;
+    --color-success-bg: #c8f7c5;
+    --color-error-bg: #f7c5c5;
+    --color-black: #000000;
+    --color-white-rgb: 255, 255, 255;
+    --font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    --font-size-base: 1em;
+    --font-size-medium: 1.2em;
+    --font-size-small: 0.8em;
+    --border-radius-small: 4px;
+    --border-radius-medium: 5px;
+    --border-radius-circle: 50%;
 }
 
-{
-box-sizing: border-box;
-}
-
-body,html {
-margin: 0;
-padding: 0;
-font-family: var(--font-family);
-height: 100%;
+body,
+html {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-family);
+    height: 100%;
 }
 
 .container {
-display: flex;
-height: 100vh;
+    display: flex;
+    height: 100vh;
 }
 
 /* Sidebar Styles */
 .sidebar {
-  width: 180px;
-  background: var(--color-primary);
-  color: var(--color-text-light);
-  padding: 20px;
-  overflow-y: auto;
-  overflow: visible;
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  transition: left 0.3s ease-in-out; /* Smooth transition for moving */
-  z-index: 1000;
+    width: 180px;
+    background: var(--color-primary);
+    color: var(--color-text-light);
+    padding: 20px;
+    overflow-y: auto;
+    overflow: visible;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transition: left 0.3s ease-in-out; /* Smooth transition for moving */
+    z-index: 1000;
 }
 
 /* Collapsed Sidebar */
 .sidebar.collapsed {
-  left: -220px; /* Move the sidebar partially off-screen */
-  overflow: visible;
-  padding: 20px; /* Reset padding */
+    left: -220px; /* Move the sidebar partially off-screen */
+    overflow: visible;
+    padding: 20px; /* Reset padding */
 }
 
 /* Collapse Button */
 .collapse-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px; /* Align to the top-right corner of the sidebar */
-  background: var(--color-accent);
-  border: none;
-  color: var(--color-text-light);
-  font-size: var(--font-size-small);
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--border-radius-small);
-  z-index: 1001;
-  transition: transform 0.3s ease-in-out, right 0.3s ease-in-out; /* Smooth rotation and position change */
+    position: absolute;
+    top: 10px;
+    right: 10px; /* Align to the top-right corner of the sidebar */
+    background: var(--color-accent);
+    border: none;
+    color: var(--color-text-light);
+    font-size: var(--font-size-small);
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: var(--border-radius-small);
+    z-index: 1001;
+    transition: transform 0.3s ease-in-out, right 0.3s ease-in-out; /* Smooth rotation and position change */
 }
 
 /* Position the button when the sidebar is expanded */
 .sidebar:not(.collapsed) .collapse-btn {
-  right: 10px; /* Align to the top-right corner of the sidebar */
+    right: 10px; /* Align to the top-right corner of the sidebar */
 }
 
 /* Rotate the button when the sidebar is collapsed */
 .sidebar.collapsed .collapse-btn {
-  transform: scaleX(-1); /* Rotate by 180 degrees */
-  right: -44px; /* Keep it aligned to the top-right of the collapsed sidebar */
+    transform: scaleX(-1); /* Rotate by 180 degrees */
+    right: -44px; /* Keep it aligned to the top-right of the collapsed sidebar */
 }
 
 .sidebar h2 {
-margin-top: 0;
-font-size: var(--font-size-medium);
-border-bottom: 1px solid var(--color-border);
-padding-bottom: 5px;
+    margin-top: 0;
+    font-size: var(--font-size-medium);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 5px;
 }
 
 .channel-list {
-list-style: none;
-padding: 0;
-margin: 10px 0 20px 0;
+    list-style: none;
+    padding: 0;
+    margin: 10px 0 20px 0;
 }
 
 .channel-item {
-padding: 8px 10px;
-margin: 5px 0;
-cursor: pointer;
-border-radius: var(--border-radius-small);
-transition: background 0.2s;
+    padding: 8px 10px;
+    margin: 5px 0;
+    cursor: pointer;
+    border-radius: var(--border-radius-small);
+    transition: background 0.2s;
+    max-height: 70vh; /* Prevent excessive height on large screens */
+    overflow-y: auto; /* Allow scrolling inside the channel if content overflows */
 }
 
 .channel-item:hover {
-background: var(--color-secondary);
+    background: var(--color-secondary);
 }
 
 .active-channel {
-background: var(--color-accent);
+    background: var(--color-accent);
 }
 
 .main-content {
@@ -122,135 +121,145 @@ background: var(--color-accent);
     margin-left: 0;
     padding: 20px;
     height: calc(100vh - 40px); /* Adjust height to fit inside viewport */
-    overflow: hidden;
+    overflow-y: auto; /* Allow scrolling if content overflows */
     background: var(--color-background);
     transition: margin-left 0.3s;
 }
 
 .sidebar.collapsed ~ .main-content {
-margin-left: 0;
+    margin-left: 0;
 }
 
-input,textarea,button {
-font-family: inherit;
-font-size: var(--font-size-base);
+input,
+textarea,
+button {
+    font-family: inherit;
+    font-size: var(--font-size-base);
 }
 
 button {
-cursor: pointer;
+    cursor: pointer;
 }
 
 .chat-container {
-display: flex;
-flex-direction: column;
-height: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .messages-area {
-flex: 1;
-overflow-y: auto;
-background: var(--color-white);
-padding: 10px;
-margin-bottom: 10px;
+    flex: 1;
+    overflow-y: auto;
+    background: var(--color-white);
+    padding: 10px;
+    margin-bottom: 10px;
+    height: auto; /* Dynamically adjusts based on content */
 }
 
 .message-container {
-position: relative;
-border: 1px solid var(--color-border-light);
-padding: 5px;
-margin-bottom: 5px;
+    position: relative;
+    border: 1px solid var(--color-border-light);
+    padding: 5px;
+    margin-bottom: 5px;
 }
 
 .message-date {
-font-size: var(--font-size-small);
-color: var(--color-text-muted);
-margin-bottom: 3px;
+    font-size: var(--font-size-small);
+    color: var(--color-text-muted);
+    margin-bottom: 3px;
 }
 
 .flashcard {
-position: relative;
-border: 1px solid var(--color-border-light);
-padding: 10px;
-margin-bottom: 10px;
-background: var(--color-white);
+    position: relative;
+    border: 1px solid var(--color-border-light);
+    padding: 10px;
+    margin-bottom: 10px;
+    background: var(--color-white);
 }
 
 .answer-row {
-display: flex;
-align-items: center;
-gap: 5px;
-margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 5px;
 }
 
 #answers-container {
-margin-top: 5px;
-margin-bottom: 5px;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 
 .correct-highlight {
-background-color: var(--color-success-bg);
+    background-color: var(--color-success-bg);
 }
 
 .incorrect-highlight {
-background-color: var(--color-error-bg);
+    background-color: var(--color-error-bg);
 }
 
 .code-runner-wrapper {
-position: relative;
-width: 100%;
-height: 100%;
+    position: relative;
+    width: 100%;
+    height: 100%;
 }
 
 .code-runner-textarea {
-width: 100%;
-height: calc(100% - 150px);
-box-sizing: border-box;
-resize: none;
+    width: 100%;
+    height: calc(100% - 150px);
+    box-sizing: border-box;
+    resize: none;
 }
 
 .code-runner-output {
-position: absolute;
-bottom: 0;
-left: 0;
-width: 100%;
-height: 150px;
-background: var(--color-white);
-border-top: 1px solid var(--color-border-light);
-padding: 10px;
-box-sizing: border-box;
-overflow-y: auto;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 150px;
+    background: var(--color-white);
+    border-top: 1px solid var(--color-border-light);
+    padding: 10px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .run-btn {
-position: absolute;
-top: 10px;
-right: 10px;
-z-index: 10;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
 }
 
 .reminder-container {
-border: 1px solid var(--color-border-light);
-padding: 10px;
-background: var(--color-white);
-margin-bottom: 10px;
+    border: 1px solid var(--color-border-light);
+    padding: 10px;
+    background: var(--color-white);
+    margin-bottom: 10px;
 }
 
 .toolbar {
-  display: flex;
-  gap: 5px; /* Reduce gap for better fitting */
-  flex-wrap: wrap; /* Allow wrapping */
-  justify-content: flex-start; /* Align items properly */
+    display: flex;
+    gap: 5px; /* Reduce gap for better fitting */
+    flex-wrap: wrap; /* Allow wrapping */
+    justify-content: flex-start; /* Align items properly */
 }
 
 .toolbar button {
-  white-space: nowrap; /* Prevent text from wrapping within buttons */
-  padding: 2px 4px; /* Minimal padding for compact layout */
-  min-width: auto; /* Allow buttons to shrink if needed */
-  flex: 0 1 auto; /* Prevent stretching, but allow shrinking */
+    white-space: nowrap; /* Prevent text from wrapping within buttons */
+    padding: 2px 4px; /* Minimal padding for compact layout */
+    min-width: auto; /* Allow buttons to shrink if needed */
+    flex: 0 1 auto; /* Prevent stretching, but allow shrinking */
 }
 
 @media (max-width: 600px) {
-  .toolbar {
-    justify-content: flex-start; /* Center buttons on small screens */
-  }
+    .messages-area {
+        height: auto; /* Let content expand freely */
+    }
+    .main-content {
+        height: auto;
+        overflow-y: auto; /* Allow scrolling for small devices */
+    }
+    .toolbar {
+        justify-content: flex-start; /* Center buttons on small screens */
+    }
 }
