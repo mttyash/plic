@@ -20,6 +20,8 @@
     --border-radius-small: 4px;
     --border-radius-medium: 5px;
     --border-radius-circle: 50%;
+    --button-padding: 5px 10px;
+    --input-padding: 8px 12px;
 }
 
 body,
@@ -35,7 +37,7 @@ html {
     height: 100vh;
 }
 
-/* Sidebar Styles */
+
 .sidebar {
     width: 180px;
     background: var(--color-primary);
@@ -47,42 +49,41 @@ html {
     top: 0;
     bottom: 0;
     left: 0;
-    transition: left 0.3s ease-in-out; /* Smooth transition for moving */
+    transition: left 0.3s ease-in-out;
     z-index: 1000;
 }
 
-/* Collapsed Sidebar */
+
 .sidebar.collapsed {
-    left: -220px; /* Move the sidebar partially off-screen */
+    left: -220px;
     overflow: visible;
-    padding: 20px; /* Reset padding */
+    padding: 20px;
 }
 
-/* Collapse Button */
+
 .collapse-btn {
     position: absolute;
     top: 10px;
-    right: 10px; /* Align to the top-right corner of the sidebar */
+    right: 10px;
     background: var(--color-accent);
     border: none;
     color: var(--color-text-light);
     font-size: var(--font-size-small);
     cursor: pointer;
-    padding: 8px 12px;
     border-radius: var(--border-radius-small);
     z-index: 1001;
-    transition: transform 0.3s ease-in-out, right 0.3s ease-in-out; /* Smooth rotation and position change */
+    transition: transform 0.3s ease-in-out, right 0.3s ease-in-out;
 }
 
-/* Position the button when the sidebar is expanded */
+
 .sidebar:not(.collapsed) .collapse-btn {
-    right: 10px; /* Align to the top-right corner of the sidebar */
+    right: 10px;
 }
 
-/* Rotate the button when the sidebar is collapsed */
+
 .sidebar.collapsed .collapse-btn {
-    transform: scaleX(-1); /* Rotate by 180 degrees */
-    right: -44px; /* Keep it aligned to the top-right of the collapsed sidebar */
+    transform: scaleX(-1);
+    right: -44px;
 }
 
 .sidebar h2 {
@@ -99,13 +100,30 @@ html {
 }
 
 .channel-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 8px 10px;
     margin: 5px 0;
     cursor: pointer;
     border-radius: var(--border-radius-small);
     transition: background 0.2s;
-    max-height: 70vh; /* Prevent excessive height on large screens */
-    overflow-y: auto; /* Allow scrolling inside the channel if content overflows */
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.channel-item .delete-btn {
+    background-color: #e74c3c;
+    color: var(--color-white);
+    border: none;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.channel-item .delete-btn:hover {
+    background-color: #c0392b;
+    color: var(--color-white);
 }
 
 .channel-item:hover {
@@ -120,8 +138,8 @@ html {
     flex: 1;
     margin-left: 0;
     padding: 20px;
-    height: calc(100vh - 40px); /* Adjust height to fit inside viewport */
-    overflow-y: auto; /* Allow scrolling if content overflows */
+    height: calc(100vh - 40px);
+    overflow-y: auto;
     background: var(--color-background);
     transition: margin-left 0.3s;
 }
@@ -138,7 +156,26 @@ button {
 }
 
 button {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+    border: none;
+    padding: var(--button-padding);
+    font-size: 1em;
+    border-radius: var(--border-radius-small);
     cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    margin: 5px;
+}
+
+button:hover {
+    background-color: var(--color-accent);
+    color: var(--color-white);
+}
+
+button:disabled {
+    background-color: var(--color-border-light);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
 }
 
 .chat-container {
@@ -147,18 +184,22 @@ button {
     height: 100%;
 }
 
+.chat-input {
+    height: 40px;
+    resize: none;
+}
+
 .messages-area {
     flex: 1;
     overflow-y: auto;
     background: var(--color-white);
     padding: 10px;
     margin-bottom: 10px;
-    height: auto; /* Dynamically adjusts based on content */
+    height: auto;
 }
 
 .message-container {
     position: relative;
-    border: 1px solid var(--color-border-light);
     padding: 5px;
     margin-bottom: 5px;
 }
@@ -167,14 +208,82 @@ button {
     font-size: var(--font-size-small);
     color: var(--color-text-muted);
     margin-bottom: 3px;
+    display: inline-block;
+}
+
+.message-toolbar {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: flex;
+    gap: 5px;
+}
+
+.message-toolbar button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    border-radius: var(--border-radius-small);
+    transition: background 0.3s ease, color 0.3s ease;
+    margin-right: 5px;
+}
+
+.message-toolbar .edit-btn {
+    background-color: var(--color-secondary);
+    color: var(--color-white);
+}
+
+.message-toolbar .edit-btn:hover {
+    background-color: var(--color-accent);
+    color: var(--color-white);
+}
+
+.message-toolbar .delete-btn {
+    background-color: #e74c3c;
+    color: var(--color-white);
+}
+
+.message-toolbar .delete-btn:hover {
+    background-color: #c0392b;
+    color: var(--color-white);
+}
+
+.message-toolbar .download-btn {
+    background-color: var(--color-accent);
+    color: var(--color-white);
+}
+
+.message-toolbar .download-btn:hover {
+    background-color: #0056b3;
+    color: var(--color-white);
 }
 
 .flashcard {
     position: relative;
     border: 1px solid var(--color-border-light);
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 5px;
+    margin-bottom: 5px;
     background: var(--color-white);
+}
+
+.flashcard-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+}
+
+.flashcard-buttons {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+    margin-left: auto;
+}
+
+.flashcard-buttons button {
+    white-space: wrap;
 }
 
 .answer-row {
@@ -197,30 +306,44 @@ button {
     background-color: var(--color-error-bg);
 }
 
-.code-runner-wrapper {
-    position: relative;
-    width: 100%;
-    height: 100%;
+.whiteboard-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
+
+
+.code-runner-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+
+.code-runner-wrapper {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr 100px;
+  overflow: hidden;
+}
+
 
 .code-runner-textarea {
-    width: 100%;
-    height: calc(100% - 150px);
-    box-sizing: border-box;
-    resize: none;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  overflow-y: auto;
 }
 
+
 .code-runner-output {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 150px;
-    background: var(--color-white);
-    border-top: 1px solid var(--color-border-light);
-    padding: 10px;
-    box-sizing: border-box;
-    overflow-y: auto;
+  width: 100%;
+  background: var(--color-white);
+  border-top: 1px solid var(--color-border-light);
+  padding: 10px;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .run-btn {
@@ -239,27 +362,248 @@ button {
 
 .toolbar {
     display: flex;
-    gap: 5px; /* Reduce gap for better fitting */
-    flex-wrap: wrap; /* Allow wrapping */
-    justify-content: flex-start; /* Align items properly */
+    gap: 5px;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
 }
 
 .toolbar button {
-    white-space: nowrap; /* Prevent text from wrapping within buttons */
-    padding: 2px 4px; /* Minimal padding for compact layout */
-    min-width: auto; /* Allow buttons to shrink if needed */
-    flex: 0 1 auto; /* Prevent stretching, but allow shrinking */
+    white-space: wrap;
+    min-width: auto;
+    flex: 0 1 auto;
 }
 
 @media (max-width: 600px) {
     .messages-area {
-        height: auto; /* Let content expand freely */
+        height: auto;
     }
     .main-content {
         height: auto;
-        overflow-y: auto; /* Allow scrolling for small devices */
+        overflow-y: auto;
     }
     .toolbar {
-        justify-content: flex-start; /* Center buttons on small screens */
+        justify-content: flex-start;
     }
+}
+
+.image-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 0;
+    transition: background 0.1s ease, opacity 0.1s ease;
+}
+
+.image-overlay img {
+    max-width: 90%;
+    max-height: 90%;
+    transform: scale(0.8);
+    transition: transform 0.1s ease;
+}
+
+.image-overlay.show {
+    background: rgba(0, 0, 0, 0.8);
+    opacity: 1;
+}
+
+.image-overlay.show img {
+    transform: scale(1);
+}
+
+.image-overlay .close-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: #fff;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.download-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1em;
+    color: var(--color-text-dark);
+    border-radius: var(--border-radius-small);
+    transition: background 0.3s ease, color 0.3s ease;
+    margin-right: 5px;
+}
+
+.download-btn:hover {
+    background: var(--color-accent);
+    color: var(--color-white);
+}
+
+.hidden-filename {
+    display: none;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="datetime-local"],
+input[type="file"],
+textarea {
+    width: 100%;
+    padding: var(--input-padding);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--border-radius-small);
+    font-family: var(--font-family);
+    font-size: var(--font-size-base);
+    color: var(--color-text-dark);
+    background-color: var(--color-white);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+input[type="datetime-local"]:focus,
+input[type="file"]:focus,
+textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    outline: none;
+}
+
+input[type="text"]::placeholder,
+input[type="password"]::placeholder,
+input[type="email"]::placeholder,
+input[type="datetime-local"]::placeholder,
+textarea::placeholder {
+    color: var(--color-text-muted);
+}
+
+input[type="file"] {
+    padding: 0;
+}
+
+textarea {
+    resize: none;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--border-radius-small);
+    background: var(--color-white);
+    white-space: wrap;
+}
+
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 150px;
+    height: 8px;
+    background: var(--color-border-light);
+    border-radius: 5px;
+    outline: none;
+    transition: background 0.3s ease;
+    margin: 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: var(--color-accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: var(--color-accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover,
+input[type="range"]::-moz-range-thumb:hover {
+    background: var(--color-primary);
+}
+
+input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--border-radius-small);
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    background: none;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+    border-radius: var(--border-radius-small);
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: var(--border-radius-small);
+}
+
+
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border-light);
+    border-radius: var(--border-radius-small);
+    background-color: var(--color-white);
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+
+input[type="checkbox"]:checked {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+
+input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 25%;
+    left: 42.5%;
+    width: 6px;
+    height: 10px;
+    border: solid var(--color-white);
+    border-width: 0 2px 2px 0;
+    transform: translate(-30%, -30%) rotate(45deg);
+}
+
+
+input[type="checkbox"]:hover {
+    border-color: var(--color-accent);
 }
