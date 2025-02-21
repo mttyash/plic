@@ -18,15 +18,17 @@
 
   
   const categories = [
-    { name: "General", channels: [{ id: "text1", name: "General Chat", type: "text" }] },
-    { name: "Learning", channels: [
-        { id: "flashcard1", name: "Flashcards", type: "flashcard" },
-        { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" },
-        { id: "code1", name: "Code Runner", type: "code" }
-      ]
-    },
-    { name: "Reminders", channels: [{ id: "reminder1", name: "My Reminders", type: "reminder" }] }
-  ];
+  { name: "General", channels: [{ id: "text1", name: "General Chat", type: "text" }] },
+  { name: "Learning", channels: [
+      { id: "flashcard1", name: "Flashcards", type: "flashcard" },
+      { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" },
+      { id: "code1", name: "Code Runner", type: "code" }
+    ]
+  },
+  { name: "Reminders", channels: [{ id: "reminder1", name: "My Reminders", type: "reminder" }] },
+  { name: "Utilities", channels: [{ id: "crypt1", name: "Crypt", type: "crypt" }] }
+];
+
   const chatMessages = {}, flashcards = {}, reminders = {};
   window.whiteboardData = window.whiteboardData || {};
   window.codeData = window.codeData || {};
@@ -72,7 +74,7 @@
       });
       frag.appendChild(ul);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.14"));
+    frag.appendChild(el("div", { class: "version-text" }, "v1.15"));
     sidebar.appendChild(frag);
     if (!window.sidebarOutsideListenerAdded) {
       const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
@@ -99,7 +101,8 @@
       flashcard: () => renderFlashcardChannel(main, channel),
       whiteboard: () => renderWhiteboardChannel(main, channel),
       code: () => renderCodeChannel(main, channel),
-      reminder: () => renderReminderChannel(main, channel)
+      reminder: () => renderReminderChannel(main, channel),
+	  crypt: () => renderCryptChannel(main, channel)
     }[channel.type] || (() => {}))();
   };
 
@@ -141,7 +144,7 @@
         if (msg.files?.length) {
           const filesDiv = el("div");
           msg.files.forEach(file => {
-            const fileWrapper = el("div", { style: { border: "1px solid #ccc", padding: "5px", marginTop: "5px", position: "relative" } });
+            const fileWrapper = el("div", { style: { padding: "5px", marginTop: "5px", position: "relative" } });
             if (file.type.startsWith("image/")) {
               const img = el("img", { src: file.content, style: { maxWidth: "200px", cursor: "pointer" } });
               img.addEventListener("click", () => showImageOverlay(file.content));
@@ -436,44 +439,75 @@
         testDiv.style.display = "block";
     });
     const renderTestMode = (testContainer, channel) => {
-        testContainer.innerHTML = "";
-        const cards = [...(flashcards[channel.id] || [])].sort(() => Math.random() - 0.5);
-        if (!cards.length) { testContainer.textContent = "No flashcards available for testing."; return; }
-        const formTest = el("form", { onsubmit: e => {
-            e.preventDefault();
-            let score = 0;
-            cards.forEach((card, idx) => {
-                const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`)).map(i => +i.value);
-                const correct = card.answers.map((ans, i) => ans.correct ? i : null).filter(x => x !== null);
-                if (selected.sort().toString() === correct.sort().toString()) score++;
-                formTest.querySelectorAll(`input[name="card${idx}"]`).forEach(inp => {
-                    const val = +inp.value;
-                    if (correct.includes(val)) inp.parentElement.classList.add("correct-highlight");
-                    else if (inp.checked) inp.parentElement.classList.add("incorrect-highlight");
-                    inp.disabled = true;
-                });
-            });
-            formTest.querySelector("button[type='submit']").disabled = true;
-            formTest.appendChild(el("div", { style: { marginTop: "10px" } }, `Your score: ${score} / ${cards.length}`));
-        }});
-        cards.forEach((card, idx) => {
-            const qDiv = el("div", { style: { marginBottom: "10px" } });
-            qDiv.appendChild(el("p", {}, "Q: " + card.question));
-            card.answers.forEach((ans, aIdx) => {
-                const label = el("label", { style: { display: "block" } });
-                label.appendChild(el("input", { type: "checkbox", name: `card${idx}`, value: aIdx }));
-                label.append(" " + ans.text);
-                qDiv.appendChild(label);
-            });
-            formTest.appendChild(qDiv);
+  testContainer.innerHTML = "";
+  const cards = [...(flashcards[channel.id] || [])].sort(() => Math.random() - 0.5);
+  if (!cards.length) {
+    testContainer.textContent = "No flashcards available for testing.";
+    return;
+  }
+
+  // For each card, create a new object with a shuffled answers array.
+  const testData = cards.map(card => {
+    const shuffledAnswers = card.answers.slice();
+    // Shuffle using Fisher-Yates algorithm
+    for (let i = shuffledAnswers.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledAnswers[i], shuffledAnswers[j]] = [shuffledAnswers[j], shuffledAnswers[i]];
+    }
+    return { question: card.question, answers: shuffledAnswers };
+  });
+
+  const formTest = el("form", { onsubmit: e => {
+      e.preventDefault();
+      let score = 0;
+      testData.forEach((testCard, idx) => {
+        // Get selected answer indices for this question.
+        const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`))
+                              .map(inp => +inp.value);
+        // Determine correct indices from the shuffled answers.
+        const correct = testCard.answers
+                              .map((ans, i) => ans.correct ? i : null)
+                              .filter(x => x !== null);
+        if (selected.sort().toString() === correct.sort().toString()) score++;
+        formTest.querySelectorAll(`input[name="card${idx}"]`).forEach(inp => {
+          const val = +inp.value;
+          if (correct.includes(val)) inp.parentElement.classList.add("correct-highlight");
+          else if (inp.checked) inp.parentElement.classList.add("incorrect-highlight");
+          inp.disabled = true;
         });
-        formTest.appendChild(el("button", { type: "submit" }, "Submit Answers"));
-        formTest.appendChild(el("button", { type: "button", onclick: () => {
-            testContainer.style.display = "none";
-            creationDiv.style.display = "block";
-        }}, "Back"));
-        testContainer.appendChild(formTest);
-    };
+      });
+      formTest.querySelector("button[type='submit']").disabled = true;
+      formTest.appendChild(
+        el("div", { style: { marginTop: "10px" } }, `Your score: ${score} / ${testData.length}`)
+      );
+    }
+  });
+
+  // Render each flashcard with its shuffled answers.
+  testData.forEach((testCard, idx) => {
+    const qDiv = el("div", { style: { marginBottom: "10px" } });
+    qDiv.appendChild(el("p", {}, "Q: " + testCard.question));
+    testCard.answers.forEach((ans, aIdx) => {
+      // Use flexbox to vertically center checkbox and text.
+      const label = el("label", {
+        style: { display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }
+      });
+      label.appendChild(el("input", { type: "checkbox", name: `card${idx}`, value: aIdx }));
+      label.append(ans.text);
+      qDiv.appendChild(label);
+    });
+    formTest.appendChild(qDiv);
+  });
+  
+  formTest.appendChild(el("button", { type: "submit" }, "Submit Answers"));
+  formTest.appendChild(el("button", { type: "button", onclick: () => {
+    testContainer.style.display = "none";
+    creationDiv.style.display = "block";
+  }}, "Back"));
+  
+  testContainer.appendChild(formTest);
+};
+
 };
 
   
@@ -491,7 +525,7 @@
   const toolbar = el("div", { class: "toolbar", style: { display: "flex", gap: "10px", marginBottom: "10px" } });
   const colorPicker = el("input", { 
     type: "color", 
-    value: "#000000", 
+    value: "#fff", 
     onchange: e => { 
       brushColor = e.target.value; 
       eraserMode = false; 
@@ -553,8 +587,10 @@
   
   
   const canvas = el("canvas");
+  canvas.style.cursor = "none";
   canvasWrapper.appendChild(canvas);
   const context = canvas.getContext("2d");
+  canvas.classList.add("whiteboard-context");
   document.oncontextmenu = () => false;
 
   
@@ -565,7 +601,7 @@
   whiteboardPanZoomData[channel] = whiteboardPanZoomData[channel] || { offsetX: 0, offsetY: 0, scale: 1 };
   let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
       cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
-      brushColor = "#000000", brushSize = 1, eraserMode = false, panMode = false;
+      brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false;
   
   const toScreenX = x => (x + offsetX) * scale,
         toScreenY = y => (y + offsetY) * scale,
@@ -578,7 +614,7 @@
     canvas.width = canvasWrapper.clientWidth;
     canvas.height = canvasWrapper.clientHeight;
   
-    context.fillStyle = "#fff";
+    context.fillStyle = "#1a1a2e";
     context.fillRect(0, 0, canvas.width, canvas.height);
   
     drawings.forEach(line => {
@@ -814,13 +850,7 @@
 
   
   const codeArea = el("textarea", {
-    class: "code-runner-textarea",
-    style: {
-      boxSizing: "border-box",
-      resize: "none",
-      overflowY: "auto",
-      minHeight: "0" 
-    }
+    class: "code-runner-textarea"
   });
   wrapper.appendChild(codeArea);
   if (window.codeData[channel.id])
@@ -829,15 +859,7 @@
 
   
   const outputDiv = el("div", {
-    class: "code-runner-output",
-    style: {
-      width: "100%",
-      background: "var(--color-white)",
-      borderTop: "1px solid var(--color-border-light)",
-      padding: "10px",
-      boxSizing: "border-box",
-      overflowY: "auto"
-    }
+    class: "code-runner-output"
   });
   wrapper.appendChild(outputDiv);
 
@@ -937,7 +959,210 @@
     container.appendChild(form);
   };
 
+  const renderCryptChannel = (container, channel) => {
+    container.innerHTML = "";
+    container.appendChild(el("h2", {}, "Crypt Channel"));
   
+    const formDiv = el("div", {
+      class: "crypt-container",
+      style: { display: "flex", flexDirection: "column", gap: "10px" }
+    });
+    const actionRow = el("div", {
+      style: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }
+    });
+  
+    // 🔹 Password Length Slider
+    const sliderLabel = el("label", {}, "Password Length: ");
+    const slider = el("input", {
+      type: "range",
+      min: "6",
+      max: "200",
+      value: "12",
+      oninput: (e) => {
+        passwordLengthDisplay.textContent = e.target.value;
+      }
+    });
+    const passwordLengthDisplay = el("span", {}, slider.value);
+    sliderLabel.appendChild(slider);
+    sliderLabel.appendChild(passwordLengthDisplay);
+    actionRow.appendChild(sliderLabel);
+  
+    const generateBtn = el("button", {
+      onclick: () => {
+        const length = parseInt(slider.value, 10);
+        keyInput.value = generateRandomPassword(length);
+      }
+    }, "Generate");
+  
+    // The encrypt and decrypt buttons are now asynchronous.
+    const encryptBtn = el("button", {
+      onclick: async () => {
+        if (!keyInput.value) {
+          alert("Please enter an encryption key.");
+          return;
+        }
+        try {
+          resultOutput.value = await encryptMessage(messageInput.value, keyInput.value);
+        } catch (e) {
+          alert("Encryption failed: " + e.message);
+        }
+      }
+    }, "Encrypt");
+  
+    const decryptBtn = el("button", {
+      onclick: async () => {
+        if (!keyInput.value) {
+          alert("Please enter an encryption key.");
+          return;
+        }
+        try {
+          resultOutput.value = await decryptMessage(messageInput.value, keyInput.value);
+        } catch (e) {
+          alert("Decryption failed. Make sure the input is valid. " + e.message);
+        }
+      }
+    }, "Decrypt");
+  
+    actionRow.appendChild(generateBtn);
+    actionRow.appendChild(encryptBtn);
+    actionRow.appendChild(decryptBtn);
+    formDiv.appendChild(actionRow);
+  
+    // 🔹 Encryption Key Input
+    const keyInputLabel = el("label", {}, "Encryption Key: ");
+    const keyInput = el("input", { type: "text", placeholder: "Enter encryption key" });
+    keyInputLabel.appendChild(keyInput);
+    formDiv.appendChild(keyInputLabel);
+  
+    // 🔹 Message Input
+    const messageLabel = el("label", {}, "Message: ");
+    const messageInput = el("textarea", { placeholder: "Enter your message here", rows: "4" });
+    messageLabel.appendChild(messageInput);
+    formDiv.appendChild(messageLabel);
+  
+    // 🔹 Output Result
+    const resultLabel = el("label", {}, "Result: ");
+    const resultOutput = el("textarea", { readonly: true, rows: "4" });
+    resultLabel.appendChild(resultOutput);
+    formDiv.appendChild(resultLabel);
+  
+    container.appendChild(formDiv);
+  
+    // ──────────────────────────────────────────
+    // Helper functions for byte/hex conversions
+    // ──────────────────────────────────────────
+    function uint8ArrayToHex(uint8array) {
+      return Array.from(uint8array)
+        .map(b => ("0" + b.toString(16)).slice(-2))
+        .join("");
+    }
+  
+    function hexToUint8Array(hex) {
+      let length = hex.length / 2;
+      let result = new Uint8Array(length);
+      for (let i = 0; i < length; i++) {
+        result[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      return result;
+    }
+  
+    function concatUint8Arrays(arrays) {
+      let totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
+      let result = new Uint8Array(totalLength);
+      let offset = 0;
+      arrays.forEach(arr => {
+        result.set(arr, offset);
+        offset += arr.length;
+      });
+      return result;
+    }
+  
+    // ──────────────────────────────────────────
+    // Derive a keystream using key, IV, and a counter via SHA-256.
+    // ──────────────────────────────────────────
+    async function getKeystream(keyBuffer, iv, length) {
+      const keystream = new Uint8Array(length);
+      let counter = 0;
+      let offset = 0;
+      while (offset < length) {
+        // Create a 4-byte counter (big-endian)
+        const counterBytes = new Uint8Array(4);
+        new DataView(counterBytes.buffer).setUint32(0, counter, false);
+        // Combine key, IV, and counter
+        const combined = concatUint8Arrays([keyBuffer, iv, counterBytes]);
+        // Compute SHA-256 hash
+        const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
+        const hashArray = new Uint8Array(hashBuffer);
+        const bytesToCopy = Math.min(hashArray.length, length - offset);
+        keystream.set(hashArray.slice(0, bytesToCopy), offset);
+        offset += bytesToCopy;
+        counter++;
+      }
+      return keystream;
+    }
+  
+    // ──────────────────────────────────────────
+    // 🔐 Improved asynchronous encryption function
+    // ──────────────────────────────────────────
+    async function encryptMessage(message, key) {
+      const encoder = new TextEncoder();
+      const messageBuffer = encoder.encode(message);
+      const keyBuffer = encoder.encode(key);
+  
+      // Generate a random 16-byte IV.
+      const iv = new Uint8Array(16);
+      crypto.getRandomValues(iv);
+  
+      // Derive a keystream as long as the message.
+      const keystream = await getKeystream(keyBuffer, iv, messageBuffer.length);
+  
+      // XOR message bytes with the keystream.
+      const encryptedBuffer = new Uint8Array(messageBuffer.length);
+      for (let i = 0; i < messageBuffer.length; i++) {
+        encryptedBuffer[i] = messageBuffer[i] ^ keystream[i];
+      }
+  
+      // Return IV and ciphertext as hex, separated by a colon.
+      return uint8ArrayToHex(iv) + ":" + uint8ArrayToHex(encryptedBuffer);
+    }
+  
+    // ──────────────────────────────────────────
+    // 🔓 Improved asynchronous decryption function
+    // ──────────────────────────────────────────
+    async function decryptMessage(encrypted, key) {
+      const [ivHex, cipherHex] = encrypted.split(":");
+      if (!ivHex || !cipherHex) throw new Error("Invalid encrypted message format");
+  
+      const iv = hexToUint8Array(ivHex);
+      const encryptedBuffer = hexToUint8Array(cipherHex);
+      const encoder = new TextEncoder();
+      const keyBuffer = encoder.encode(key);
+  
+      // Derive the same keystream.
+      const keystream = await getKeystream(keyBuffer, iv, encryptedBuffer.length);
+  
+      // XOR to recover the original message.
+      const decryptedBuffer = new Uint8Array(encryptedBuffer.length);
+      for (let i = 0; i < encryptedBuffer.length; i++) {
+        decryptedBuffer[i] = encryptedBuffer[i] ^ keystream[i];
+      }
+      const decoder = new TextDecoder();
+      return decoder.decode(decryptedBuffer);
+    }
+  
+    // ──────────────────────────────────────────
+    // Random password generator
+    // ──────────────────────────────────────────
+    const generateRandomPassword = (length) => {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫";
+      let result = "";
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+  };
+
   document.addEventListener("DOMContentLoaded", () => {
     renderSidebar();
     if (categories.length && categories[0].channels.length)

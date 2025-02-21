@@ -1,16 +1,16 @@
 :root {
-    --color-primary: #2c3e50;
-    --color-secondary: #34495e;
-    --color-accent: #007bff;
-    --color-background: #ecf0f1;
+    --color-primary: #1a1a2e;
+    --color-secondary: #16213e;
+    --color-accent: #0f3460;
+    --color-background: #0d1117;
     --color-white: #ffffff;
-    --color-text-light: #ecf0f1;
-    --color-text-dark: #2c3e50;
-    --color-text-muted: #555555;
-    --color-border: #34495e;
-    --color-border-light: #dddddd;
-    --color-success-bg: #c8f7c5;
-    --color-error-bg: #f7c5c5;
+    --color-text-light: #d1d5db;
+    --color-text-dark: #f8f9fa;
+    --color-text-muted: #a1a1a1;
+    --color-border: #1f4068;
+    --color-border-light: #2f4f70;
+    --color-success-bg: #2b6c00;
+    --color-error-bg: #500020;
     --color-black: #000000;
     --color-white-rgb: 255, 255, 255;
     --font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -30,6 +30,8 @@ html {
     padding: 0;
     font-family: var(--font-family);
     height: 100%;
+    background: var(--color-background);
+    color: var(--color-text-light);
 }
 
 .container {
@@ -78,18 +80,25 @@ html {
 
 .sidebar:not(.collapsed) .collapse-btn {
     right: 10px;
+    background: var(--color-background);
+    color: var(--color-white);
 }
-
 
 .sidebar.collapsed .collapse-btn {
     transform: scaleX(-1);
     right: -44px;
+    background: var(--color-primary);
+    color: var(--color-white);
 }
+
+.collapse-btn:hover {
+    background: var(--color-secondary);
+}
+
 
 .sidebar h2 {
     margin-top: 0;
     font-size: var(--font-size-medium);
-    border-bottom: 1px solid var(--color-border);
     padding-bottom: 5px;
 }
 
@@ -156,24 +165,24 @@ button {
 }
 
 button {
-    background-color: var(--color-primary);
+    background: var(--color-primary);
     color: var(--color-white);
     border: none;
     padding: var(--button-padding);
     font-size: 1em;
     border-radius: var(--border-radius-small);
     cursor: pointer;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background 0.3s ease, color 0.3s ease;
     margin: 5px;
 }
 
 button:hover {
-    background-color: var(--color-accent);
+    background: var(--color-secondary);
     color: var(--color-white);
 }
 
 button:disabled {
-    background-color: var(--color-border-light);
+    background-color: var(--color-secondary);
     color: var(--color-text-muted);
     cursor: not-allowed;
 }
@@ -192,15 +201,16 @@ button:disabled {
 .messages-area {
     flex: 1;
     overflow-y: auto;
-    background: var(--color-white);
+    background: var(--color-primary);
     padding: 10px;
     margin-bottom: 10px;
+    border-radius: var(--border-radius-small);
     height: auto;
 }
 
 .message-container {
     position: relative;
-    padding: 5px;
+    padding: 20px;
     margin-bottom: 5px;
 }
 
@@ -261,10 +271,10 @@ button:disabled {
 
 .flashcard {
     position: relative;
-    border: 1px solid var(--color-border-light);
     padding: 5px;
     margin-bottom: 5px;
-    background: var(--color-white);
+    border-radius: var(--border-radius-small);
+    background: var(--color-primary);
 }
 
 .flashcard-toolbar {
@@ -299,11 +309,11 @@ button:disabled {
 }
 
 .correct-highlight {
-    background-color: var(--color-success-bg);
+    background: linear-gradient(90deg, var(--color-success-bg), #00000000);
 }
 
 .incorrect-highlight {
-    background-color: var(--color-error-bg);
+    background: linear-gradient(90deg, var(--color-error-bg), #00000000);
 }
 
 .whiteboard-container {
@@ -312,6 +322,9 @@ button:disabled {
   height: 100%;
 }
 
+.whiteboard-context {
+    border-radius: var(--border-radius-small);
+}
 
 .code-runner-container {
   display: flex;
@@ -324,23 +337,27 @@ button:disabled {
   flex: 1;
   display: grid;
   grid-template-rows: 1fr 100px;
+  grid-row-gap: 10px; /* This adds a 10px gap between the rows */
   overflow: hidden;
 }
 
 
 .code-runner-textarea {
+  color: var(--color-text-dark);
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
   resize: none;
   overflow-y: auto;
+  border-radius: var(--border-radius-small);
+  background: var(--color-primary);
 }
 
 
 .code-runner-output {
   width: 100%;
-  background: var(--color-white);
-  border-top: 1px solid var(--color-border-light);
+  background: var(--color-primary);
+  border-radius: var(--border-radius-small);
   padding: 10px;
   box-sizing: border-box;
   overflow-y: auto;
@@ -354,7 +371,6 @@ button:disabled {
 }
 
 .reminder-container {
-    border: 1px solid var(--color-border-light);
     padding: 10px;
     background: var(--color-white);
     margin-bottom: 10px;
@@ -461,12 +477,12 @@ input[type="file"],
 textarea {
     width: 100%;
     padding: var(--input-padding);
-    border: 1px solid var(--color-border-light);
+    border: 1px solid var(--color-primary);
     border-radius: var(--border-radius-small);
     font-family: var(--font-family);
     font-size: var(--font-size-base);
-    color: var(--color-text-dark);
-    background-color: var(--color-white);
+    color: var(--color-text-muted);
+    background-color: var(--color-primary);
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
     box-sizing: border-box;
 }
@@ -477,8 +493,6 @@ input[type="email"]:focus,
 input[type="datetime-local"]:focus,
 input[type="file"]:focus,
 textarea:focus {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
     outline: none;
 }
 
@@ -502,10 +516,9 @@ textarea {
     display: flex;
     align-items: center;
     padding: 5px;
-    border: 1px solid var(--color-border-light);
     border-radius: var(--border-radius-small);
-    background: var(--color-white);
-    white-space: wrap;
+    background: var(--color-primary);
+    white-space: nowrap;
 }
 
 
@@ -576,9 +589,8 @@ input[type="checkbox"] {
     -moz-appearance: none;
     width: 20px;
     height: 20px;
-    border: 2px solid var(--color-border-light);
     border-radius: var(--border-radius-small);
-    background-color: var(--color-white);
+    background-color: var(--color-primary);
     cursor: pointer;
     position: relative;
     transition: background-color 0.3s ease, border-color 0.3s ease;
@@ -594,7 +606,7 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
-    top: 25%;
+    top: 27%;
     left: 42.5%;
     width: 6px;
     height: 10px;
@@ -606,4 +618,14 @@ input[type="checkbox"]:checked::after {
 
 input[type="checkbox"]:hover {
     border-color: var(--color-accent);
+}
+
+input[type="checkbox"]:disabled {
+    background-color: var(--color-border-light);
+    border-color: var(--color-border-light);
+    cursor: not-allowed;
+}
+
+input[type="checkbox"]:disabled::after {
+    border-color: var(--color-border-light);
 }
