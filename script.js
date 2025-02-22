@@ -64,17 +64,17 @@
           }
         }, ch.name);
         if (ch.type === "function") {
-          li.appendChild(el("button", { class: "delete-btn", onclick: e => {
+          li.appendChild(el("button", { class: "remove-btn", onclick: e => {
             e.stopPropagation();
             const funcCat = categories.find(c => c.name === "Functions");
             if (funcCat) { funcCat.channels = funcCat.channels.filter(x => x.id !== ch.id); renderSidebar(); }
-          } }, "Delete"));
+          } }, "Remove"));
         }
         ul.appendChild(li);
       });
       frag.appendChild(ul);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.15"));
+    frag.appendChild(el("div", { class: "version-text" }, "v1.16"));
     sidebar.appendChild(frag);
     if (!window.sidebarOutsideListenerAdded) {
       const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
@@ -238,7 +238,7 @@
             updateMessages();
           });
         } }, "Edit"));        
-        btnContainer.appendChild(el("button", { class: "delete-btn", onclick: () => { 
+        btnContainer.appendChild(el("button", { class: "remove-btn", onclick: () => { 
           chatMessages[channel.id].splice(idx, 1); updateMessages(); 
         } }, "Remove"));
         msgContainer.appendChild(btnContainer);
@@ -291,7 +291,7 @@
       fileListDiv.innerHTML = "";
       attachedFiles.forEach((file, i) => {
         const fileDiv = el("div", { class: "file-item" }, file.name);
-        fileDiv.appendChild(el("button", { style: { marginLeft: "10px" }, onclick: () => {
+        fileDiv.appendChild(el("button", { class: "remove-btn", style: { marginLeft: "10px" }, onclick: () => {
           attachedFiles.splice(i, 1); updateFileList();
         } }, "Remove"));
         fileListDiv.appendChild(fileDiv);
@@ -368,7 +368,7 @@
         const row = el("div", { class: "answer-row" });
         row.appendChild(el("input", { type: "text", placeholder: "Answer", required: true, value: txt, style: { flex: "1", minWidth: "80px", maxWidth: "calc(100% - 120px)" } }));
         row.appendChild(el("input", { type: "checkbox", title: "Mark as correct answer", checked: corr }));
-        row.appendChild(el("button", { type: "button", onclick: () => row.remove() }, "Remove"));
+        row.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => row.remove() }, "Remove"));
         answersContainer.appendChild(row);
     };
     addAnswerRow();
@@ -426,7 +426,7 @@
                     card.answers = newAns; renderFlashcardsList();
                 }
             } }, "Edit"));
-            toolbar.appendChild(el("button", { type: "button", onclick: () => { flashcards[channel.id].splice(idx, 1); renderFlashcardsList(); } }, "Remove"));
+            toolbar.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => { flashcards[channel.id].splice(idx, 1); renderFlashcardsList(); } }, "Remove"));
             cardDiv.appendChild(toolbar);
             flashcardListDiv.appendChild(cardDiv);
         });
@@ -446,10 +446,10 @@
     return;
   }
 
-  // For each card, create a new object with a shuffled answers array.
+  
   const testData = cards.map(card => {
     const shuffledAnswers = card.answers.slice();
-    // Shuffle using Fisher-Yates algorithm
+    
     for (let i = shuffledAnswers.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledAnswers[i], shuffledAnswers[j]] = [shuffledAnswers[j], shuffledAnswers[i]];
@@ -461,10 +461,10 @@
       e.preventDefault();
       let score = 0;
       testData.forEach((testCard, idx) => {
-        // Get selected answer indices for this question.
+        
         const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`))
                               .map(inp => +inp.value);
-        // Determine correct indices from the shuffled answers.
+        
         const correct = testCard.answers
                               .map((ans, i) => ans.correct ? i : null)
                               .filter(x => x !== null);
@@ -483,12 +483,12 @@
     }
   });
 
-  // Render each flashcard with its shuffled answers.
+  
   testData.forEach((testCard, idx) => {
     const qDiv = el("div", { style: { marginBottom: "10px" } });
     qDiv.appendChild(el("p", {}, "Q: " + testCard.question));
     testCard.answers.forEach((ans, aIdx) => {
-      // Use flexbox to vertically center checkbox and text.
+      
       const label = el("label", {
         style: { display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }
       });
@@ -511,7 +511,7 @@
 };
 
   
-  const renderWhiteboardChannel = (container, channel) => {
+const renderWhiteboardChannel = (container, channel) => {
   container.innerHTML = "";
   
   container.style.display = "flex";
@@ -525,7 +525,7 @@
   const toolbar = el("div", { class: "toolbar", style: { display: "flex", gap: "10px", marginBottom: "10px" } });
   const colorPicker = el("input", { 
     type: "color", 
-    value: "#fff", 
+    value: "#ffffff",
     onchange: e => { 
       brushColor = e.target.value; 
       eraserMode = false; 
@@ -551,13 +551,13 @@
   const panModeButton = el("button", { 
     onclick: () => { 
       panMode = !panMode; 
-      panModeButton.style.backgroundColor = panMode ? "#cccccc" : ""; 
+      panModeButton.style.backgroundColor = panMode ? "var(--color-accent)" : ""; 
       redrawCanvas(); 
     } 
   }, "Pan Mode");
   const zoomInButton = el("button", { 
     onclick: () => {
-      const factor = 1.25, newScale = scale * factor, cx = canvas.width / 2, cy = canvas.height / 2;
+      const factor = 2, newScale = scale * factor, cx = canvas.width / 2, cy = canvas.height / 2;
       offsetX += cx * (1 / newScale - 1 / scale);
       offsetY += cy * (1 / newScale - 1 / scale); 
       scale = newScale;
@@ -567,7 +567,7 @@
   }, "Zoom In");
   const zoomOutButton = el("button", { 
     onclick: () => {
-      const factor = 1.5, newScale = scale / factor, cx = canvas.width / 2, cy = canvas.height / 2;
+      const factor = 2, newScale = scale / (factor * factor), cx = canvas.width / 2, cy = canvas.height / 2;
       offsetX += cx * (1 / newScale - 1 / scale);
       offsetY += cy * (1 / newScale - 1 / scale); 
       scale = newScale;
@@ -575,9 +575,15 @@
       whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
     } 
   }, "Zoom Out");
-
   
-  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton);
+  const snapButton = el("button", {
+    onclick: () => { 
+      snapMode = !snapMode;
+      snapButton.style.backgroundColor = snapMode ? "var(--color-accent)" : "";
+    }
+  }, "Snap");
+
+  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton);
   headerContainer.appendChild(toolbar);
   container.appendChild(headerContainer);
   
@@ -601,28 +607,55 @@
   whiteboardPanZoomData[channel] = whiteboardPanZoomData[channel] || { offsetX: 0, offsetY: 0, scale: 1 };
   let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
       cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
-      brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false;
+      brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false,
+      snapMode = false; 
   
   const toScreenX = x => (x + offsetX) * scale,
         toScreenY = y => (y + offsetY) * scale,
         toTrueX = x => (x / scale) - offsetX,
-        toTrueY = y => (y / scale) - offsetY;
-
+        toTrueY = y => (y / scale) - offsetY; 
   
   const redrawCanvas = () => {
-    
     canvas.width = canvasWrapper.clientWidth;
     canvas.height = canvasWrapper.clientHeight;
-  
-    context.fillStyle = "#1a1a2e";
+
+    
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    
+    const patternSize = 40;
+    const dotRadius = 1;
+    const dotColor = '#3c3c81';
+    const backgroundColor = '#1a1a2e';
+
+    
+    let startX = (offsetX * scale) % patternSize;
+    let startY = (offsetY * scale) % patternSize;
+    if (startX < 0) startX += patternSize;
+    if (startY < 0) startY += patternSize;
+
+    
+    context.fillStyle = backgroundColor;
     context.fillRect(0, 0, canvas.width, canvas.height);
-  
+
+    
+    context.fillStyle = dotColor;
+    for (let x = startX; x < canvas.width; x += patternSize) {
+      for (let y = startY; y < canvas.height; y += patternSize) {
+        context.beginPath();
+        context.arc(x, y, dotRadius, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+
+    
     drawings.forEach(line => {
       drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
     });
-  
-    drawAxes(); 
+
+    drawAxes();
   };
+      
 
   const drawLine = (x0, y0, x1, y1, color, size) => {
     context.beginPath();
@@ -638,7 +671,7 @@
     if (!panMode) return; 
     const cx = canvas.width / 2, cy = canvas.height / 2;
     context.save();
-    context.strokeStyle = "gray"; 
+    context.strokeStyle = "#3c3c81"; 
     context.lineWidth = 1;
     
     context.beginPath();
@@ -665,7 +698,7 @@
     const dispSize = eraserMode ? brushSize * 4 : brushSize;
     context.beginPath();
     context.arc(cursorX, cursorY, dispSize / 2, 0, Math.PI * 2);
-    context.strokeStyle = eraserMode ? "red" : "black";
+    context.strokeStyle = eraserMode ? "red" : "white";
     context.lineWidth = 1;
     context.stroke();
   };
@@ -673,12 +706,34 @@
   let leftMouseDown = false;
   canvas.addEventListener("mousedown", e => {
     if (e.button === 0) leftMouseDown = true;
-    cursorX = prevCursorX = e.offsetX;
-    cursorY = prevCursorY = e.offsetY;
+    
+    let x = e.offsetX, y = e.offsetY;
+    if (snapMode) {
+      const patternSize = 40;
+      let startXGrid = (offsetX * scale) % patternSize;
+      let startYGrid = (offsetY * scale) % patternSize;
+      if (startXGrid < 0) startXGrid += patternSize;
+      if (startYGrid < 0) startYGrid += patternSize;
+      x = startXGrid + Math.round((x - startXGrid) / patternSize) * patternSize;
+      y = startYGrid + Math.round((y - startYGrid) / patternSize) * patternSize;
+    }
+    cursorX = prevCursorX = x;
+    cursorY = prevCursorY = y;
   });
   canvas.addEventListener("mousemove", e => {
-    cursorX = e.offsetX;
-    cursorY = e.offsetY;
+    
+    let x = e.offsetX, y = e.offsetY;
+    if (snapMode) {
+      const patternSize = 40;
+      let startXGrid = (offsetX * scale) % patternSize;
+      let startYGrid = (offsetY * scale) % patternSize;
+      if (startXGrid < 0) startXGrid += patternSize;
+      if (startYGrid < 0) startYGrid += patternSize;
+      x = startXGrid + Math.round((x - startXGrid) / patternSize) * patternSize;
+      y = startYGrid + Math.round((y - startYGrid) / patternSize) * patternSize;
+    }
+    cursorX = x;
+    cursorY = y;
     if (leftMouseDown) {
       if (panMode) {
         offsetX += (cursorX - prevCursorX) / scale;
@@ -714,38 +769,68 @@
     const rect = canvas.getBoundingClientRect();
     if (e.touches.length !== 1) return;
     const touch = e.touches[0];
-    cursorX = touch.clientX - rect.left;
-    cursorY = touch.clientY - rect.top;
+  
+    const patternSize = 40;
+    let startXGrid = (offsetX * scale) % patternSize;
+    let startYGrid = (offsetY * scale) % patternSize;
+    if (startXGrid < 0) startXGrid += patternSize;
+    if (startYGrid < 0) startYGrid += patternSize;
+  
+    const rawX = touch.clientX - rect.left;
+    const rawY = touch.clientY - rect.top;
+    let snappedX = rawX, snappedY = rawY;
+    if (snapMode) {
+      snappedX = startXGrid + Math.round((rawX - startXGrid) / patternSize) * patternSize;
+      snappedY = startYGrid + Math.round((rawY - startYGrid) / patternSize) * patternSize;
+    }
+    cursorX = snappedX;
+    cursorY = snappedY;
+  
     if (panMode) {
-      const prevTouch = prevTouches[0],
-            prevTouchX = prevTouch.clientX - rect.left, 
-            prevTouchY = prevTouch.clientY - rect.top;
-      offsetX += (cursorX - prevTouchX) / scale;
-      offsetY += (cursorY - prevTouchY) / scale; 
+      const prevTouch = prevTouches[0];
+      const rawPrevX = prevTouch.clientX - rect.left;
+      const rawPrevY = prevTouch.clientY - rect.top;
+      let snappedPrevX = rawPrevX, snappedPrevY = rawPrevY;
+      if (snapMode) {
+        snappedPrevX = startXGrid + Math.round((rawPrevX - startXGrid) / patternSize) * patternSize;
+        snappedPrevY = startYGrid + Math.round((rawPrevY - startYGrid) / patternSize) * patternSize;
+      }
+      offsetX += (snappedX - snappedPrevX) / scale;
+      offsetY += (snappedY - snappedPrevY) / scale; 
       redrawCanvas();
       whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
       prevTouches[0] = touch;
     } else {
-      const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
-            prevTouch = prevTouches[0],
-            prevTouchX = prevTouch.clientX - rect.left, 
-            prevTouchY = prevTouch.clientY - rect.top,
-            psx = toTrueX(prevTouchX), psy = toTrueY(prevTouchY);
+      const prevTouch = prevTouches[0];
+      const rawPrevX = prevTouch.clientX - rect.left;
+      const rawPrevY = prevTouch.clientY - rect.top;
+      let snappedPrevX = rawPrevX, snappedPrevY = rawPrevY;
+      if (snapMode) {
+        snappedPrevX = startXGrid + Math.round((rawPrevX - startXGrid) / patternSize) * patternSize;
+        snappedPrevY = startYGrid + Math.round((rawPrevY - startYGrid) / patternSize) * patternSize;
+      }
+      
+      
+      const sx = toTrueX(snappedX), sy = toTrueY(snappedY);
+      const psx = toTrueX(snappedPrevX), psy = toTrueY(snappedPrevY);
+      
       if (eraserMode) {
-        for (let i = drawings.length - 1; i >= 0; i--)
+        for (let i = drawings.length - 1; i >= 0; i--) {
           if (isNearLine(drawings[i].x0, drawings[i].y0, drawings[i].x1, drawings[i].y1, sx, sy, (brushSize / scale) * 2, drawings[i].size))
             drawings.splice(i, 1);
+        }
         window.whiteboardData[channel] = drawings;
         redrawCanvas();
       } else {
         drawings.push({ x0: psx, y0: psy, x1: sx, y1: sy, color: brushColor, size: brushSize });
-        drawLine(prevTouchX, prevTouchY, cursorX, cursorY, brushColor, brushSize);
+        drawLine(snappedPrevX, snappedPrevY, snappedX, snappedY, brushColor, brushSize);
         window.whiteboardData[channel] = drawings;
       }
       prevTouches[0] = touch;
     }
     drawCursorCircle();
   });
+  
   canvas.addEventListener("touchend", e => { if (e.touches.length === 0) prevTouches[0] = null; });
   window.addEventListener("resize", redrawCanvas);
   redrawCanvas();
@@ -941,7 +1026,7 @@
         const remDiv = el("div", { class: "reminder-container", style: { backgroundColor: rem.color, color: getContrastingTextColor(rem.color), padding: "10px", margin: "5px 0", borderRadius: "4px" } });
         if (rem.date) remDiv.appendChild(el("div", {}, new Date(rem.date).toLocaleString()));
         remDiv.appendChild(el("div", {}, rem.text));
-        remDiv.appendChild(el("button", { onclick: () => { reminders[channel.id].splice(idx, 1); renderReminders(); } }, "Remove"));
+        remDiv.appendChild(el("button", { class: "remove-btn", onclick: () => { reminders[channel.id].splice(idx, 1); renderReminders(); } }, "Remove"));
         listDiv.appendChild(remDiv);
       });
     };
@@ -971,7 +1056,7 @@
       style: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }
     });
   
-    // 🔹 Password Length Slider
+    
     const sliderLabel = el("label", {}, "Password Length: ");
     const slider = el("input", {
       type: "range",
@@ -994,7 +1079,7 @@
       }
     }, "Generate");
   
-    // The encrypt and decrypt buttons are now asynchronous.
+    
     const encryptBtn = el("button", {
       onclick: async () => {
         if (!keyInput.value) {
@@ -1028,29 +1113,47 @@
     actionRow.appendChild(decryptBtn);
     formDiv.appendChild(actionRow);
   
-    // 🔹 Encryption Key Input
+    
     const keyInputLabel = el("label", {}, "Encryption Key: ");
     const keyInput = el("input", { type: "text", placeholder: "Enter encryption key" });
     keyInputLabel.appendChild(keyInput);
     formDiv.appendChild(keyInputLabel);
+    const copyKeyBtn = el("button", {
+      onclick: () => {
+        navigator.clipboard.writeText(keyInput.value);
+      }
+    }, "Copy Key");
+    formDiv.appendChild(copyKeyBtn);
   
-    // 🔹 Message Input
+    
     const messageLabel = el("label", {}, "Message: ");
     const messageInput = el("textarea", { placeholder: "Enter your message here", rows: "4" });
     messageLabel.appendChild(messageInput);
     formDiv.appendChild(messageLabel);
+    const copyMessageBtn = el("button", {
+      onclick: () => {
+        navigator.clipboard.writeText(messageInput.value);
+      }
+    }, "Copy Message");
+    formDiv.appendChild(copyMessageBtn);
   
-    // 🔹 Output Result
+    
     const resultLabel = el("label", {}, "Result: ");
     const resultOutput = el("textarea", { readonly: true, rows: "4" });
     resultLabel.appendChild(resultOutput);
     formDiv.appendChild(resultLabel);
+    const copyResultBtn = el("button", {
+      onclick: () => {
+        navigator.clipboard.writeText(resultOutput.value);
+      }
+    }, "Copy Result");
+    formDiv.appendChild(copyResultBtn);
   
     container.appendChild(formDiv);
   
-    // ──────────────────────────────────────────
-    // Helper functions for byte/hex conversions
-    // ──────────────────────────────────────────
+    
+    
+    
     function uint8ArrayToHex(uint8array) {
       return Array.from(uint8array)
         .map(b => ("0" + b.toString(16)).slice(-2))
@@ -1077,20 +1180,20 @@
       return result;
     }
   
-    // ──────────────────────────────────────────
-    // Derive a keystream using key, IV, and a counter via SHA-256.
-    // ──────────────────────────────────────────
+    
+    
+    
     async function getKeystream(keyBuffer, iv, length) {
       const keystream = new Uint8Array(length);
       let counter = 0;
       let offset = 0;
       while (offset < length) {
-        // Create a 4-byte counter (big-endian)
+        
         const counterBytes = new Uint8Array(4);
         new DataView(counterBytes.buffer).setUint32(0, counter, false);
-        // Combine key, IV, and counter
+        
         const combined = concatUint8Arrays([keyBuffer, iv, counterBytes]);
-        // Compute SHA-256 hash
+        
         const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
         const hashArray = new Uint8Array(hashBuffer);
         const bytesToCopy = Math.min(hashArray.length, length - offset);
@@ -1101,34 +1204,34 @@
       return keystream;
     }
   
-    // ──────────────────────────────────────────
-    // 🔐 Improved asynchronous encryption function
-    // ──────────────────────────────────────────
+    
+    
+    
     async function encryptMessage(message, key) {
       const encoder = new TextEncoder();
       const messageBuffer = encoder.encode(message);
       const keyBuffer = encoder.encode(key);
   
-      // Generate a random 16-byte IV.
+      
       const iv = new Uint8Array(16);
       crypto.getRandomValues(iv);
   
-      // Derive a keystream as long as the message.
+      
       const keystream = await getKeystream(keyBuffer, iv, messageBuffer.length);
   
-      // XOR message bytes with the keystream.
+      
       const encryptedBuffer = new Uint8Array(messageBuffer.length);
       for (let i = 0; i < messageBuffer.length; i++) {
         encryptedBuffer[i] = messageBuffer[i] ^ keystream[i];
       }
   
-      // Return IV and ciphertext as hex, separated by a colon.
+      
       return uint8ArrayToHex(iv) + ":" + uint8ArrayToHex(encryptedBuffer);
     }
   
-    // ──────────────────────────────────────────
-    // 🔓 Improved asynchronous decryption function
-    // ──────────────────────────────────────────
+    
+    
+    
     async function decryptMessage(encrypted, key) {
       const [ivHex, cipherHex] = encrypted.split(":");
       if (!ivHex || !cipherHex) throw new Error("Invalid encrypted message format");
@@ -1138,10 +1241,10 @@
       const encoder = new TextEncoder();
       const keyBuffer = encoder.encode(key);
   
-      // Derive the same keystream.
+      
       const keystream = await getKeystream(keyBuffer, iv, encryptedBuffer.length);
   
-      // XOR to recover the original message.
+      
       const decryptedBuffer = new Uint8Array(encryptedBuffer.length);
       for (let i = 0; i < encryptedBuffer.length; i++) {
         decryptedBuffer[i] = encryptedBuffer[i] ^ keystream[i];
@@ -1150,9 +1253,9 @@
       return decoder.decode(decryptedBuffer);
     }
   
-    // ──────────────────────────────────────────
-    // Random password generator
-    // ──────────────────────────────────────────
+    
+    
+    
     const generateRandomPassword = (length) => {
       const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫";
       let result = "";

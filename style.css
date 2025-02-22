@@ -1,7 +1,7 @@
 :root {
     --color-primary: #1a1a2e;
-    --color-secondary: #16213e;
-    --color-accent: #0f3460;
+    --color-secondary: #2e2e5f;
+    --color-accent: #3c3c81;
     --color-background: #0d1117;
     --color-white: #ffffff;
     --color-text-light: #d1d5db;
@@ -39,7 +39,6 @@ html {
     height: 100vh;
 }
 
-
 .sidebar {
     width: 180px;
     background: var(--color-primary);
@@ -55,19 +54,17 @@ html {
     z-index: 1000;
 }
 
-
 .sidebar.collapsed {
     left: -220px;
     overflow: visible;
     padding: 20px;
 }
 
-
 .collapse-btn {
     position: absolute;
     top: 10px;
     right: 10px;
-    background: var(--color-accent);
+    background: var(--color-primary);
     border: none;
     color: var(--color-text-light);
     font-size: var(--font-size-small);
@@ -76,7 +73,6 @@ html {
     z-index: 1001;
     transition: transform 0.3s ease-in-out, right 0.3s ease-in-out;
 }
-
 
 .sidebar:not(.collapsed) .collapse-btn {
     right: 10px;
@@ -94,7 +90,6 @@ html {
 .collapse-btn:hover {
     background: var(--color-secondary);
 }
-
 
 .sidebar h2 {
     margin-top: 0;
@@ -121,26 +116,12 @@ html {
     overflow-y: auto;
 }
 
-.channel-item .delete-btn {
-    background-color: #e74c3c;
-    color: var(--color-white);
-    border: none;
-    border-radius: var(--border-radius-small);
-    cursor: pointer;
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.channel-item .delete-btn:hover {
-    background-color: #c0392b;
-    color: var(--color-white);
-}
-
 .channel-item:hover {
     background: var(--color-secondary);
 }
 
 .active-channel {
-    background: var(--color-accent);
+    background: var(--color-secondary);
 }
 
 .main-content {
@@ -165,7 +146,7 @@ button {
 }
 
 button {
-    background: var(--color-primary);
+    background: var(--color-secondary);
     color: var(--color-white);
     border: none;
     padding: var(--button-padding);
@@ -177,6 +158,11 @@ button {
 }
 
 button:hover {
+    background: var(--color-accent);
+    color: var(--color-white);
+}
+
+button:active {
     background: var(--color-secondary);
     color: var(--color-white);
 }
@@ -185,6 +171,22 @@ button:disabled {
     background-color: var(--color-secondary);
     color: var(--color-text-muted);
     cursor: not-allowed;
+}
+
+
+button.remove-btn {
+    background: #cb2816;
+}
+
+button.remove-btn:hover {
+    background: #e74c3c;
+}
+
+.download-btn {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    margin-right: 5px;
 }
 
 .chat-container {
@@ -229,46 +231,6 @@ button:disabled {
     gap: 5px;
 }
 
-.message-toolbar button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1em;
-    border-radius: var(--border-radius-small);
-    transition: background 0.3s ease, color 0.3s ease;
-    margin-right: 5px;
-}
-
-.message-toolbar .edit-btn {
-    background-color: var(--color-secondary);
-    color: var(--color-white);
-}
-
-.message-toolbar .edit-btn:hover {
-    background-color: var(--color-accent);
-    color: var(--color-white);
-}
-
-.message-toolbar .delete-btn {
-    background-color: #e74c3c;
-    color: var(--color-white);
-}
-
-.message-toolbar .delete-btn:hover {
-    background-color: #c0392b;
-    color: var(--color-white);
-}
-
-.message-toolbar .download-btn {
-    background-color: var(--color-accent);
-    color: var(--color-white);
-}
-
-.message-toolbar .download-btn:hover {
-    background-color: #0056b3;
-    color: var(--color-white);
-}
-
 .flashcard {
     position: relative;
     padding: 5px;
@@ -283,17 +245,6 @@ button:disabled {
     align-items: flex-start;
     margin-bottom: 5px;
     flex-wrap: wrap;
-}
-
-.flashcard-buttons {
-    display: flex;
-    gap: 5px;
-    margin-top: 5px;
-    margin-left: auto;
-}
-
-.flashcard-buttons button {
-    white-space: wrap;
 }
 
 .answer-row {
@@ -317,50 +268,48 @@ button:disabled {
 }
 
 .whiteboard-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .whiteboard-context {
     border-radius: var(--border-radius-small);
+    transition: transform 0.3s ease-in-out;
 }
 
 .code-runner-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
-
 
 .code-runner-wrapper {
-  flex: 1;
-  display: grid;
-  grid-template-rows: 1fr 100px;
-  grid-row-gap: 10px; /* This adds a 10px gap between the rows */
-  overflow: hidden;
+    flex: 1;
+    display: grid;
+    grid-template-rows: 1fr 100px;
+    grid-row-gap: 10px;
+    overflow: hidden;
 }
-
 
 .code-runner-textarea {
-  color: var(--color-text-dark);
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  resize: none;
-  overflow-y: auto;
-  border-radius: var(--border-radius-small);
-  background: var(--color-primary);
+    color: var(--color-text-dark);
+    min-height: 0;
+    width: 100%;
+    box-sizing: border-box;
+    resize: none;
+    overflow-y: auto;
+    border-radius: var(--border-radius-small);
+    background: var(--color-primary);
 }
 
-
 .code-runner-output {
-  width: 100%;
-  background: var(--color-primary);
-  border-radius: var(--border-radius-small);
-  padding: 10px;
-  box-sizing: border-box;
-  overflow-y: auto;
+    width: 100%;
+    background: var(--color-primary);
+    border-radius: var(--border-radius-small);
+    padding: 10px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .run-btn {
@@ -382,12 +331,6 @@ button:disabled {
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
-}
-
-.toolbar button {
-    white-space: wrap;
-    min-width: auto;
-    flex: 0 1 auto;
 }
 
 @media (max-width: 600px) {
@@ -432,37 +375,6 @@ button:disabled {
 
 .image-overlay.show img {
     transform: scale(1);
-}
-
-.image-overlay .close-btn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: #fff;
-    border: none;
-    font-size: 1.5em;
-    cursor: pointer;
-    padding: 5px 10px;
-    border-radius: 5px;
-}
-
-.download-btn {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1em;
-    color: var(--color-text-dark);
-    border-radius: var(--border-radius-small);
-    transition: background 0.3s ease, color 0.3s ease;
-    margin-right: 5px;
-}
-
-.download-btn:hover {
-    background: var(--color-accent);
-    color: var(--color-white);
 }
 
 .hidden-filename {
@@ -521,13 +433,12 @@ textarea {
     white-space: nowrap;
 }
 
-
 input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
     width: 150px;
     height: 8px;
-    background: var(--color-border-light);
+    background: var(--color-primary);
     border-radius: 5px;
     outline: none;
     transition: background 0.3s ease;
@@ -582,7 +493,6 @@ input[type="color"]::-webkit-color-swatch {
     border-radius: var(--border-radius-small);
 }
 
-
 input[type="checkbox"] {
     appearance: none;
     -webkit-appearance: none;
@@ -596,12 +506,10 @@ input[type="checkbox"] {
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-
 input[type="checkbox"]:checked {
     background-color: var(--color-accent);
     border-color: var(--color-accent);
 }
-
 
 input[type="checkbox"]:checked::after {
     content: '';
@@ -615,17 +523,32 @@ input[type="checkbox"]:checked::after {
     transform: translate(-30%, -30%) rotate(45deg);
 }
 
-
 input[type="checkbox"]:hover {
     border-color: var(--color-accent);
 }
 
 input[type="checkbox"]:disabled {
-    background-color: var(--color-border-light);
-    border-color: var(--color-border-light);
+    background-color: var(--color-secondary);
+    border-color: var(--color-accent);
     cursor: not-allowed;
 }
 
 input[type="checkbox"]:disabled::after {
-    border-color: var(--color-border-light);
+    border-color: var(--color-accent);
+}
+
+
+::-webkit-scrollbar {
+    width: 20px;
+    height: 20px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-background);
+    border-radius: var(--border-radius-small);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-secondary);
+    border-radius: var(--border-radius-small);
 }
