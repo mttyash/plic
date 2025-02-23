@@ -1,4 +1,5 @@
 (() => {
+  let activeChannelId = null;
   
   const el = (tag, props = {}, ...children) => {
     const e = document.createElement(tag);
@@ -74,7 +75,7 @@
       });
       frag.appendChild(ul);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.16"));
+    frag.appendChild(el("div", { class: "version-text" }, "v1.17"));
     sidebar.appendChild(frag);
     if (!window.sidebarOutsideListenerAdded) {
       const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
@@ -85,12 +86,12 @@
   };
 
   const selectChannel = channel => {
+    activeChannelId = channel.id;
     document.querySelectorAll(".channel-item").forEach(item =>
-      item.classList.toggle("active-channel", item.getAttribute("data-channel-id") === channel.id)
+        item.classList.toggle("active-channel", item.getAttribute("data-channel-id") === channel.id)
     );
-    document.querySelector(".sidebar").classList.add("collapsed");
     renderChannel(channel);
-  };
+};
 
   
   const renderChannel = channel => {
@@ -105,7 +106,6 @@
 	  crypt: () => renderCryptChannel(main, channel)
     }[channel.type] || (() => {}))();
   };
-
   
   const renderTextChannel = (container, channel) => {
     container.appendChild(el("h2", {}, "Text Channel"));
@@ -144,7 +144,7 @@
         if (msg.files?.length) {
           const filesDiv = el("div");
           msg.files.forEach(file => {
-            const fileWrapper = el("div", { style: { padding: "5px", marginTop: "5px", position: "relative" } });
+            const fileWrapper = el("div", { style: { position: "relative" } });
             if (file.type.startsWith("image/")) {
               const img = el("img", { src: file.content, style: { maxWidth: "200px", cursor: "pointer" } });
               img.addEventListener("click", () => showImageOverlay(file.content));
@@ -176,10 +176,10 @@
         const btnContainer = el("div", { class: "message-toolbar" });
         btnContainer.appendChild(el("button", { class: "edit-btn", onclick: () => {
           const editForm = el("form");
-          const editInput = el("textarea", { value: msg.text });
+          const rows = msg.text.split('\n').length;
+          const editInput = el("textarea", { class: "message-edited", rows: rows, value: msg.text });
           editForm.appendChild(editInput);
     
-          
           let tempFiles = msg.files.slice();
     
           const editFilesDiv = el("div");
@@ -202,7 +202,7 @@
               fileRow.appendChild(el("button", { 
                 type: "button", 
                 class: "remove-btn", 
-                style: { position: "absolute", top: "5px", right: "5px" }, 
+                style: { position: "absolute", top: "0px", right: "0px" }, 
                 onclick: () => { 
                   tempFiles.splice(fIdx, 1);
                   renderEditFiles();
@@ -229,8 +229,11 @@
           const saveBtn = el("button", { type: "submit" }, "Save");
           const cancelBtn = el("button", { type: "button", onclick: updateMessages }, "Cancel");
           editForm.append(saveBtn, cancelBtn);
-          msgContainer.innerHTML = "";
-          msgContainer.appendChild(editForm);
+    
+          const contentDiv = msgContainer.querySelector(".message-content");
+          contentDiv.innerHTML = "";
+          contentDiv.appendChild(editForm);
+    
           editForm.addEventListener("submit", e => {
             e.preventDefault();
             msg.text = editInput.value;
@@ -264,12 +267,12 @@
     chatMessages[channel.id] = chatMessages[channel.id] || [];
     updateMessages();
 
-    const fileListDiv = el("div", { style: { display: "flex", overflowX: "auto", gap: "10px" } });
+    const fileListDiv = el("div", { style: { display: "flex", overflowX: "auto" } });
     chatContainer.appendChild(fileListDiv);
 
     const footerDiv = el("div", { class: "toolbar" });
-    const textInput = el("textarea", { 
-      class: "chat-input",
+    const textInput = el("textarea", {
+      rows: "1",
       placeholder: "Type a message...", 
       style: { flex: "1", minWidth: "100px", maxWidth: "calc(100% - 120px)" },
       onkeydown: e => {
@@ -291,7 +294,7 @@
       fileListDiv.innerHTML = "";
       attachedFiles.forEach((file, i) => {
         const fileDiv = el("div", { class: "file-item" }, file.name);
-        fileDiv.appendChild(el("button", { class: "remove-btn", style: { marginLeft: "10px" }, onclick: () => {
+        fileDiv.appendChild(el("button", { class: "remove-btn", onclick: () => {
           attachedFiles.splice(i, 1); updateFileList();
         } }, "Remove"));
         fileListDiv.appendChild(fileDiv);
@@ -320,11 +323,11 @@
   
   const renderFlashcardChannel = (container, channel) => {
     container.innerHTML = "";
-    const titleContainer = el("div", { class: "flashcard-toolbar" });
+    const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
     titleContainer.appendChild(el("h2", {}, "Flashcard Maker & Tester"));
-
-    const exportImportContainer = el("div", { class: "flashcard-buttons" });
-    exportImportContainer.appendChild(el("button", { type: "button", onclick: () => {
+  
+    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap" } });
+    buttonContainer.appendChild(el("button", { type: "button", onclick: () => {
         const data = flashcards[channel.id] || [];
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
         el("a", { href: URL.createObjectURL(blob), download: "flashcards.json" }).click();
@@ -339,20 +342,21 @@
             } catch {}
         }
     });
-    exportImportContainer.appendChild(importInput);
-    exportImportContainer.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import"));
-    titleContainer.appendChild(exportImportContainer);
+    buttonContainer.appendChild(importInput);
+    buttonContainer.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import"));
+    titleContainer.appendChild(buttonContainer);
     container.appendChild(titleContainer);
-
+  
     const modeContainer = el("div"), creationDiv = el("div");
     const form = el("form", { class: "flashcard-form", onsubmit: e => {
         e.preventDefault();
         const q = questionInput.value.trim();
         if (!q) return;
         const answers = Array.from(answersContainer.querySelectorAll(".answer-row")).map(row => {
-            const [inp, chk] = row.querySelectorAll("input");
-            return inp.value.trim() ? { text: inp.value, correct: chk.checked } : null;
-        }).filter(x => x);
+          const [chk, inp] = row.querySelectorAll("input");
+          return inp.value.trim() ? { text: inp.value, correct: chk.checked } : null;
+      }).filter(x => x);
+      
         if (answers.length) {
             flashcards[channel.id] = flashcards[channel.id] || [];
             flashcards[channel.id].push({ question: q, answers });
@@ -360,79 +364,108 @@
         }
     }});
 
-    const questionInput = el("input", { type: "text", placeholder: "Enter question here", required: true, style: { width: "100%" } });
+    const questionInput = el("input", { type: "text", placeholder: "Enter question here", required: true, style: { flex: "1" } });
     form.appendChild(questionInput);
     const answersContainer = el("div", { id: "answers-container" });
     form.appendChild(answersContainer);
     const addAnswerRow = (txt = "", corr = false) => {
-        const row = el("div", { class: "answer-row" });
-        row.appendChild(el("input", { type: "text", placeholder: "Answer", required: true, value: txt, style: { flex: "1", minWidth: "80px", maxWidth: "calc(100% - 120px)" } }));
-        row.appendChild(el("input", { type: "checkbox", title: "Mark as correct answer", checked: corr }));
-        row.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => row.remove() }, "Remove"));
-        answersContainer.appendChild(row);
-    };
+      const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
+      row.appendChild(el("input", { type: "checkbox", title: "Mark as correct answer", checked: corr }));
+      row.appendChild(el("input", { type: "text", placeholder: "Answer", required: true, value: txt, style: { flex: "1" } }));
+      row.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => row.remove() }, "Remove"));
+      answersContainer.appendChild(row);
+  };
     addAnswerRow();
     form.appendChild(el("button", { type: "button", onclick: () => addAnswerRow() }, "Add Answer"));
     form.appendChild(el("button", { type: "submit" }, "Add Flashcard"));
-    creationDiv.appendChild(form);
-
-    const buttonContainer = el("div", { class: "flashcard-buttons" });
     const startTestBtn = el("button", { type: "button" }, "Start Test");
-    buttonContainer.appendChild(startTestBtn);
-    creationDiv.appendChild(buttonContainer);
+    form.appendChild(startTestBtn);
+    creationDiv.appendChild(form);
 
     const flashcardListDiv = el("div");
     creationDiv.appendChild(flashcardListDiv);
     const testDiv = el("div", { style: { display: "none" } });
     modeContainer.append(creationDiv, testDiv);
+    
     container.appendChild(modeContainer);
 
-    const renderFlashcardsList = () => {
-        flashcardListDiv.innerHTML = "";
-        (flashcards[channel.id] = flashcards[channel.id] || []).forEach((card, idx) => {
-            const cardDiv = el("div", { class: "flashcard" });
-            cardDiv.appendChild(el("p", {}, "Q: " + card.question));
-            const ul = el("ul");
-            card.answers.forEach(ans => ul.appendChild(el("li", {}, ans.text + (ans.correct ? " (Correct)" : ""))));
-            cardDiv.appendChild(ul);
-            const toolbar = el("div", { class: "toolbar" });
-            toolbar.appendChild(el("button", { type: "button", onclick: function () {
-                if (this.textContent === "Edit") {
-                    const qInput = el("input", { type: "text", value: card.question });
-                    cardDiv.replaceChild(qInput, cardDiv.querySelector("p"));
-                    const answersDiv = el("div");
-                    card.answers.forEach(ans => {
-                        const row = el("div", { class: "answer-row" });
-                        row.appendChild(el("input", { type: "text", value: ans.text }));
-                        row.appendChild(el("input", { type: "checkbox", checked: ans.correct }));
-                        answersDiv.appendChild(row);
-                    });
-                    answersDiv.appendChild(el("button", { type: "button", onclick: () => {
-                        const row = el("div", { class: "answer-row" });
-                        row.appendChild(el("input", { type: "text", placeholder: "New answer" }));
-                        row.appendChild(el("input", { type: "checkbox" }));
-                        answersDiv.appendChild(row);
-                    }}, "Add Answer"));
-                    cardDiv.replaceChild(answersDiv, ul);
-                    this.textContent = "Save";
-                } else {
-                    const qInput = cardDiv.querySelector("input[type='text']");
-                    card.question = qInput.value;
-                    const newAns = [];
-                    cardDiv.querySelectorAll(".answer-row").forEach(row => {
-                        const [inp, chk] = row.querySelectorAll("input");
-                        if (inp.value.trim()) newAns.push({ text: inp.value, correct: chk.checked });
-                    });
-                    card.answers = newAns; renderFlashcardsList();
-                }
-            } }, "Edit"));
-            toolbar.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => { flashcards[channel.id].splice(idx, 1); renderFlashcardsList(); } }, "Remove"));
-            cardDiv.appendChild(toolbar);
-            flashcardListDiv.appendChild(cardDiv);
+const renderFlashcardsList = () => {
+  flashcardListDiv.innerHTML = "";
+  (flashcards[channel.id] = flashcards[channel.id] || []).forEach((card, idx) => {
+    const cardDiv = el("div", { class: "flashcard" });
+    const questionP = el("p", {}, "Q: " + card.question);
+    cardDiv.appendChild(questionP);
+    const ul = el("div");
+    card.answers.forEach(ans => {
+      const li = el("div", { style: { display: "flex", alignItems: "center" } });
+      const checkbox = el("input", { type: "checkbox", checked: ans.correct, disabled: true });
+      li.appendChild(checkbox);
+      li.appendChild(document.createTextNode(ans.text));
+      ul.appendChild(li);
+    });
+    cardDiv.appendChild(ul);
+
+    const toolbar = el("div", { class: "toolbar" });
+
+    const editBtn = el("button", { type: "button", onclick: function () {
+      if (this.textContent === "Edit") {
+        // Switch to edit mode:
+        const qInput = el("input", { type: "text", value: card.question, style: { width: "100%" } });
+        cardDiv.replaceChild(qInput, questionP);
+
+        // Create a container for answer rows
+        const answersDiv = el("div");
+        card.answers.forEach(ans => {
+          const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
+          row.appendChild(el("input", { type: "checkbox", checked: ans.correct }));
+          row.appendChild(el("input", { type: "text", value: ans.text, style: { flex: "1" } }));
+          answersDiv.appendChild(row);
         });
-        startTestBtn.disabled = !(flashcards[channel.id]?.length);
-    };
-    renderFlashcardsList();
+        // Replace the UL with the answers container
+        cardDiv.replaceChild(answersDiv, ul);
+
+        // Create and append the Add Answer button to the toolbar
+        const addAnswerBtn = el("button", { type: "button", onclick: () => {
+          const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
+          row.appendChild(el("input", { type: "checkbox" }));
+          row.appendChild(el("input", { type: "text", placeholder: "New answer", style: { flex: "1" } }));
+          answersDiv.appendChild(row);
+        }}, "Add Answer");
+        toolbar.insertBefore(addAnswerBtn, this.nextSibling);
+        this.textContent = "Save";
+      } else {
+        // Save mode: update card data
+        const qInput = cardDiv.querySelector("input[type='text']");
+        card.question = qInput.value;
+        const newAns = [];
+        cardDiv.querySelectorAll(".answer-row").forEach(row => {
+          const [chk, inp] = row.querySelectorAll("input");
+          if (inp.value.trim()) newAns.push({ text: inp.value, correct: chk.checked });
+        });
+        card.answers = newAns;
+        // Remove the Add Answer button from the toolbar if present
+        const addAnswerBtn = toolbar.querySelector("button:nth-child(3)");
+        if (addAnswerBtn && addAnswerBtn.textContent === "Add Answer") {
+          toolbar.removeChild(addAnswerBtn);
+        }
+        renderFlashcardsList();
+      }
+    } }, "Edit");
+
+    toolbar.appendChild(editBtn);
+    toolbar.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => {
+      flashcards[channel.id].splice(idx, 1);
+      renderFlashcardsList();
+    } }, "Remove"));
+
+    cardDiv.appendChild(toolbar);
+    flashcardListDiv.appendChild(cardDiv);
+  });
+  startTestBtn.disabled = !(flashcards[channel.id]?.length);
+};
+
+renderFlashcardsList();
+
     startTestBtn.addEventListener("click", () => {
         creationDiv.style.display = "none";
         renderTestMode(testDiv, channel);
@@ -446,10 +479,8 @@
     return;
   }
 
-  
   const testData = cards.map(card => {
     const shuffledAnswers = card.answers.slice();
-    
     for (let i = shuffledAnswers.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledAnswers[i], shuffledAnswers[j]] = [shuffledAnswers[j], shuffledAnswers[i]];
@@ -461,10 +492,8 @@
       e.preventDefault();
       let score = 0;
       testData.forEach((testCard, idx) => {
-        
         const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`))
                               .map(inp => +inp.value);
-        
         const correct = testCard.answers
                               .map((ans, i) => ans.correct ? i : null)
                               .filter(x => x !== null);
@@ -478,19 +507,17 @@
       });
       formTest.querySelector("button[type='submit']").disabled = true;
       formTest.appendChild(
-        el("div", { style: { marginTop: "10px" } }, `Your score: ${score} / ${testData.length}`)
+        el("div", {}, `Your score: ${score} / ${testData.length}`)
       );
     }
   });
 
-  
   testData.forEach((testCard, idx) => {
-    const qDiv = el("div", { style: { marginBottom: "10px" } });
+    const qDiv = el("div");
     qDiv.appendChild(el("p", {}, "Q: " + testCard.question));
     testCard.answers.forEach((ans, aIdx) => {
-      
       const label = el("label", {
-        style: { display: "flex", alignItems: "center", gap: "5px", marginBottom: "5px" }
+        style: { display: "flex", alignItems: "center" }
       });
       label.appendChild(el("input", { type: "checkbox", name: `card${idx}`, value: aIdx }));
       label.append(ans.text);
@@ -498,13 +525,13 @@
     });
     formTest.appendChild(qDiv);
   });
-  
+
   formTest.appendChild(el("button", { type: "submit" }, "Submit Answers"));
   formTest.appendChild(el("button", { type: "button", onclick: () => {
     testContainer.style.display = "none";
     creationDiv.style.display = "block";
   }}, "Back"));
-  
+
   testContainer.appendChild(formTest);
 };
 
@@ -522,7 +549,7 @@ const renderWhiteboardChannel = (container, channel) => {
   headerContainer.appendChild(el("h2", {}, "Whiteboard"));
   
   
-  const toolbar = el("div", { class: "toolbar", style: { display: "flex", gap: "10px", marginBottom: "10px" } });
+  const toolbar = el("div", { class: "toolbar", style: { display: "flex" } });
   const colorPicker = el("input", { 
     type: "color", 
     value: "#ffffff",
@@ -837,12 +864,11 @@ const renderWhiteboardChannel = (container, channel) => {
 };
 
   
-  const renderCodeChannel = (container, channel) => {
+const renderCodeChannel = (container, channel) => {
   container.innerHTML = "";
   
   container.style.display = "flex";
   container.style.flexDirection = "column";
-  
   
   const headerContainer = el("div", {
     style: {
@@ -852,20 +878,12 @@ const renderWhiteboardChannel = (container, channel) => {
     }
   });
   headerContainer.appendChild(el("h2", {}, "Code Runner"));
-  const saveBtn = el("button", {}, "Save");
-  headerContainer.appendChild(saveBtn);
-  container.appendChild(headerContainer);
-
   
-  const ioContainer = el("div", {
-    class: "toolbar",
-    style: {
-      margin: "10px 0",
-      display: "flex",
-      alignItems: "center"
-    }
-  });
-  ioContainer.appendChild(
+  const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap" } });
+  const saveBtn = el("button", {}, "Save");
+  buttonContainer.appendChild(saveBtn);
+  
+  buttonContainer.appendChild(
     el("button", { onclick: () => {
       const funcCat = categories.find(c => c.name === "Functions");
       if (!funcCat?.channels?.length) return;
@@ -879,7 +897,7 @@ const renderWhiteboardChannel = (container, channel) => {
       }).click();
     } }, "Export")
   );
-  ioContainer.appendChild(
+  buttonContainer.appendChild(
     el("button", { onclick: () => {
       const importInput = el("input", {
         type: "file",
@@ -908,15 +926,25 @@ const renderWhiteboardChannel = (container, channel) => {
       importInput.click();
     } }, "Import")
   );
+  
+  headerContainer.appendChild(buttonContainer);
+  container.appendChild(headerContainer);
+
+  const ioContainer = el("div", {
+    class: "toolbar",
+    style: {
+      display: "flex",
+      alignItems: "center"
+    }
+  });
   const functionNameInput = el("input", {
     type: "text",
     placeholder: "Function Name..",
-    style: { flex: "1", minWidth: "80px", maxWidth: "calc(100% - 120px)" }
+    style: { flex: "1", minWidth: "80px" }
   });
   ioContainer.appendChild(functionNameInput);
   container.appendChild(ioContainer);
 
-  
   const wrapper = el("div", {
     class: "code-runner-wrapper",
     style: {
@@ -929,11 +957,9 @@ const renderWhiteboardChannel = (container, channel) => {
   });
   container.appendChild(wrapper);
 
-  
   const runBtn = el("button", { class: "run-btn" }, "Run Code");
   wrapper.appendChild(runBtn);
 
-  
   const codeArea = el("textarea", {
     class: "code-runner-textarea"
   });
@@ -942,13 +968,11 @@ const renderWhiteboardChannel = (container, channel) => {
     codeArea.value = window.codeData[channel.id];
   codeArea.addEventListener("input", () => window.codeData[channel.id] = codeArea.value);
 
-  
   const outputDiv = el("div", {
     class: "code-runner-output"
   });
   wrapper.appendChild(outputDiv);
 
-  
   runBtn.addEventListener("click", () => {
     const code = codeArea.value, logs = [];
     const origLog = console.log;
@@ -965,7 +989,6 @@ const renderWhiteboardChannel = (container, channel) => {
     console.log = origLog;
   });
 
-  
   functionNameInput.addEventListener("input", () => {
     const funcCat = categories.find(c => c.name === "Functions");
     saveBtn.textContent = (funcCat &&
@@ -973,7 +996,6 @@ const renderWhiteboardChannel = (container, channel) => {
       ? "Update" : "Save";
   });
 
-  
   saveBtn.addEventListener("click", () => {
     const code = codeArea.value;
     if (!code.trim()) return;
@@ -1023,7 +1045,7 @@ const renderWhiteboardChannel = (container, channel) => {
     const renderReminders = () => {
       listDiv.innerHTML = "";
       reminders[channel.id].forEach((rem, idx) => {
-        const remDiv = el("div", { class: "reminder-container", style: { backgroundColor: rem.color, color: getContrastingTextColor(rem.color), padding: "10px", margin: "5px 0", borderRadius: "4px" } });
+        const remDiv = el("div", { class: "reminder-container", style: { backgroundColor: rem.color, color: getContrastingTextColor(rem.color), borderRadius: "4px" } });
         if (rem.date) remDiv.appendChild(el("div", {}, new Date(rem.date).toLocaleString()));
         remDiv.appendChild(el("div", {}, rem.text));
         remDiv.appendChild(el("button", { class: "remove-btn", onclick: () => { reminders[channel.id].splice(idx, 1); renderReminders(); } }, "Remove"));
@@ -1035,7 +1057,7 @@ const renderWhiteboardChannel = (container, channel) => {
       e.preventDefault();
       reminders[channel.id].push({ date: dateInput.value || null, text: textInput.value, color: colorInput.value });
       dateInput.value = ""; textInput.value = ""; renderReminders();
-    }, style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" } });
+    }, style: { display: "flex", flexWrap: "wrap", alignItems: "center" } });
     
     const dateInput = el("input", { type: "datetime-local" });
     const textInput = el("input", { type: "text", placeholder: "Reminder text", required: true });
@@ -1050,13 +1072,106 @@ const renderWhiteboardChannel = (container, channel) => {
   
     const formDiv = el("div", {
       class: "crypt-container",
-      style: { display: "flex", flexDirection: "column", gap: "10px" }
-    });
-    const actionRow = el("div", {
-      style: { display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }
+      style: { display: "flex", flexDirection: "column" }
     });
   
+    const textAreaRow = el("div", {
+      style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap" }
+    });
+  
+    // Message section
+    const messageWrapper = el("div", { style: { flex: "1", marginRight: "5px" } });
+    const messageInput = el("textarea", {
+      placeholder: "Enter your message here",
+      rows: "12",
+      class: "code-runner-textarea"
+    });
     
+    // Copy Message button
+    const copyMessageBtn = el("button", {
+      onclick: () => {
+        navigator.clipboard.writeText(messageInput.value);
+      }
+    }, "Copy Message");
+  
+    // Attach File button
+    const attachFileBtn = el("button", {
+      onclick: () => {
+        fileInput.click();
+      }
+    }, "Attach File");
+  
+    // Hidden file input element
+    const fileInput = el("input", { type: "file", style: { display: "none" } });
+    fileInput.addEventListener("change", function() {
+      if (fileInput.files && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          messageInput.value = e.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+  
+    messageWrapper.appendChild(messageInput);
+    // Create a container for the message buttons below the textarea
+    const messageButtonContainer = el("div", {
+      style: { display: "flex", justifyContent: "space-between" }
+    });
+    messageButtonContainer.appendChild(attachFileBtn);
+    messageButtonContainer.appendChild(copyMessageBtn);
+    messageWrapper.appendChild(messageButtonContainer);
+    messageWrapper.appendChild(fileInput);
+    textAreaRow.appendChild(messageWrapper);
+  
+    // Result section
+    const resultWrapper = el("div", { style: { flex: "1", marginLeft: "5px" } });
+    const resultOutput = el("textarea", {
+      placeholder: "The result will appear here",
+      disabled: true,
+      rows: "12",
+      class: "code-runner-textarea"
+    });
+    
+    // Copy Result button
+    const copyResultBtn = el("button", {
+      onclick: () => {
+        navigator.clipboard.writeText(resultOutput.value);
+      }
+    }, "Copy Result");
+  
+    // Download button
+    const downloadBtn = el("button", {
+      onclick: () => {
+        const blob = new Blob([resultOutput.value], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "result.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    }, "Download");
+  
+    resultWrapper.appendChild(resultOutput);
+    // Create a container for the result buttons below the textarea
+    const resultButtonContainer = el("div", {
+      style: { display: "flex", justifyContent: "space-between" }
+    });
+    resultButtonContainer.appendChild(downloadBtn);
+    resultButtonContainer.appendChild(copyResultBtn);
+    resultWrapper.appendChild(resultButtonContainer);
+    textAreaRow.appendChild(resultWrapper);
+  
+    formDiv.appendChild(textAreaRow);
+  
+    const actionRow = el("div", {
+      style: { display: "flex", alignItems: "center", flexWrap: "wrap" }
+    });
+  
     const sliderLabel = el("label", {}, "Password Length: ");
     const slider = el("input", {
       type: "range",
@@ -1079,7 +1194,6 @@ const renderWhiteboardChannel = (container, channel) => {
       }
     }, "Generate");
   
-    
     const encryptBtn = el("button", {
       onclick: async () => {
         if (!keyInput.value) {
@@ -1113,47 +1227,25 @@ const renderWhiteboardChannel = (container, channel) => {
     actionRow.appendChild(decryptBtn);
     formDiv.appendChild(actionRow);
   
-    
-    const keyInputLabel = el("label", {}, "Encryption Key: ");
-    const keyInput = el("input", { type: "text", placeholder: "Enter encryption key" });
-    keyInputLabel.appendChild(keyInput);
-    formDiv.appendChild(keyInputLabel);
+    const keyWrapper = el("div", { style: { display: "flex", alignItems: "center" } });
+    const keyInput = el("input", {
+      type: "text",
+      placeholder: "Enter encryption key",
+      class: "code-runner-textarea",
+      style: { flex: "1" }
+    });
     const copyKeyBtn = el("button", {
       onclick: () => {
         navigator.clipboard.writeText(keyInput.value);
       }
     }, "Copy Key");
-    formDiv.appendChild(copyKeyBtn);
-  
-    
-    const messageLabel = el("label", {}, "Message: ");
-    const messageInput = el("textarea", { placeholder: "Enter your message here", rows: "4" });
-    messageLabel.appendChild(messageInput);
-    formDiv.appendChild(messageLabel);
-    const copyMessageBtn = el("button", {
-      onclick: () => {
-        navigator.clipboard.writeText(messageInput.value);
-      }
-    }, "Copy Message");
-    formDiv.appendChild(copyMessageBtn);
-  
-    
-    const resultLabel = el("label", {}, "Result: ");
-    const resultOutput = el("textarea", { readonly: true, rows: "4" });
-    resultLabel.appendChild(resultOutput);
-    formDiv.appendChild(resultLabel);
-    const copyResultBtn = el("button", {
-      onclick: () => {
-        navigator.clipboard.writeText(resultOutput.value);
-      }
-    }, "Copy Result");
-    formDiv.appendChild(copyResultBtn);
+    keyWrapper.appendChild(keyInput);
+    keyWrapper.appendChild(copyKeyBtn);
+    formDiv.appendChild(keyWrapper);
   
     container.appendChild(formDiv);
   
-    
-    
-    
+    // Helper functions for conversion and crypto operations
     function uint8ArrayToHex(uint8array) {
       return Array.from(uint8array)
         .map(b => ("0" + b.toString(16)).slice(-2))
@@ -1180,20 +1272,14 @@ const renderWhiteboardChannel = (container, channel) => {
       return result;
     }
   
-    
-    
-    
     async function getKeystream(keyBuffer, iv, length) {
       const keystream = new Uint8Array(length);
       let counter = 0;
       let offset = 0;
       while (offset < length) {
-        
         const counterBytes = new Uint8Array(4);
         new DataView(counterBytes.buffer).setUint32(0, counter, false);
-        
         const combined = concatUint8Arrays([keyBuffer, iv, counterBytes]);
-        
         const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
         const hashArray = new Uint8Array(hashBuffer);
         const bytesToCopy = Math.min(hashArray.length, length - offset);
@@ -1204,47 +1290,28 @@ const renderWhiteboardChannel = (container, channel) => {
       return keystream;
     }
   
-    
-    
-    
     async function encryptMessage(message, key) {
       const encoder = new TextEncoder();
       const messageBuffer = encoder.encode(message);
       const keyBuffer = encoder.encode(key);
-  
-      
       const iv = new Uint8Array(16);
       crypto.getRandomValues(iv);
-  
-      
       const keystream = await getKeystream(keyBuffer, iv, messageBuffer.length);
-  
-      
       const encryptedBuffer = new Uint8Array(messageBuffer.length);
       for (let i = 0; i < messageBuffer.length; i++) {
         encryptedBuffer[i] = messageBuffer[i] ^ keystream[i];
       }
-  
-      
       return uint8ArrayToHex(iv) + ":" + uint8ArrayToHex(encryptedBuffer);
     }
   
-    
-    
-    
     async function decryptMessage(encrypted, key) {
       const [ivHex, cipherHex] = encrypted.split(":");
       if (!ivHex || !cipherHex) throw new Error("Invalid encrypted message format");
-  
       const iv = hexToUint8Array(ivHex);
       const encryptedBuffer = hexToUint8Array(cipherHex);
       const encoder = new TextEncoder();
       const keyBuffer = encoder.encode(key);
-  
-      
       const keystream = await getKeystream(keyBuffer, iv, encryptedBuffer.length);
-  
-      
       const decryptedBuffer = new Uint8Array(encryptedBuffer.length);
       for (let i = 0; i < encryptedBuffer.length; i++) {
         decryptedBuffer[i] = encryptedBuffer[i] ^ keystream[i];
@@ -1253,11 +1320,9 @@ const renderWhiteboardChannel = (container, channel) => {
       return decoder.decode(decryptedBuffer);
     }
   
-    
-    
-    
     const generateRandomPassword = (length) => {
-      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫";
+      const chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫";
       let result = "";
       for (let i = 0; i < length; i++) {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -1265,6 +1330,7 @@ const renderWhiteboardChannel = (container, channel) => {
       return result;
     };
   };
+  
 
   document.addEventListener("DOMContentLoaded", () => {
     renderSidebar();

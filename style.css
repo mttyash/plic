@@ -20,14 +20,12 @@
     --border-radius-small: 4px;
     --border-radius-medium: 5px;
     --border-radius-circle: 50%;
-    --button-padding: 5px 10px;
-    --input-padding: 8px 12px;
+    --padding-small: 5px 10px;
+    --margin-small: 5px;
 }
 
 body,
 html {
-    margin: 0;
-    padding: 0;
     font-family: var(--font-family);
     height: 100%;
     background: var(--color-background);
@@ -43,7 +41,7 @@ html {
     width: 180px;
     background: var(--color-primary);
     color: var(--color-text-light);
-    padding: 20px;
+    padding: var(--padding-small);
     overflow-y: auto;
     overflow: visible;
     position: fixed;
@@ -57,13 +55,13 @@ html {
 .sidebar.collapsed {
     left: -220px;
     overflow: visible;
-    padding: 20px;
+    padding: var(--padding-small);
 }
 
 .collapse-btn {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 25px;
+    right: 0px;
     background: var(--color-primary);
     border: none;
     color: var(--color-text-light);
@@ -75,14 +73,14 @@ html {
 }
 
 .sidebar:not(.collapsed) .collapse-btn {
-    right: 10px;
+    right: 5px;
     background: var(--color-background);
     color: var(--color-white);
 }
 
 .sidebar.collapsed .collapse-btn {
     transform: scaleX(-1);
-    right: -44px;
+    right: -65px;
     background: var(--color-primary);
     color: var(--color-white);
 }
@@ -91,24 +89,25 @@ html {
     background: var(--color-secondary);
 }
 
+h2 {
+    padding-left: 40px; /* Adjust the value as needed */
+    position: relative;
+}
+
 .sidebar h2 {
-    margin-top: 0;
     font-size: var(--font-size-medium);
-    padding-bottom: 5px;
+    padding: var(--padding-small);
 }
 
 .channel-list {
     list-style: none;
-    padding: 0;
-    margin: 10px 0 20px 0;
 }
 
 .channel-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 10px;
-    margin: 5px 0;
+    padding: var(--padding-small);
     cursor: pointer;
     border-radius: var(--border-radius-small);
     transition: background 0.2s;
@@ -121,21 +120,14 @@ html {
 }
 
 .active-channel {
-    background: var(--color-secondary);
+    background-color: var(--color-accent);
 }
 
 .main-content {
     flex: 1;
-    margin-left: 0;
-    padding: 20px;
-    height: calc(100vh - 40px);
+    padding: var(--padding-small);
     overflow-y: auto;
     background: var(--color-background);
-    transition: margin-left 0.3s;
-}
-
-.sidebar.collapsed ~ .main-content {
-    margin-left: 0;
 }
 
 input,
@@ -149,12 +141,12 @@ button {
     background: var(--color-secondary);
     color: var(--color-white);
     border: none;
-    padding: var(--button-padding);
-    font-size: 1em;
+    padding: var(--padding-small);
+    margin: var(--margin-small);
+    font-size: var(--font-size-base);
     border-radius: var(--border-radius-small);
     cursor: pointer;
     transition: background 0.3s ease, color 0.3s ease;
-    margin: 5px;
 }
 
 button:hover {
@@ -173,7 +165,6 @@ button:disabled {
     cursor: not-allowed;
 }
 
-
 button.remove-btn {
     background: #cb2816;
 }
@@ -184,57 +175,53 @@ button.remove-btn:hover {
 
 .download-btn {
     position: absolute;
-    top: 5px;
-    right: 5px;
-    margin-right: 5px;
+    top: 0px;
+    right: 0px;
 }
 
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: 100%;
-}
-
-.chat-input {
-    height: 40px;
-    resize: none;
 }
 
 .messages-area {
     flex: 1;
     overflow-y: auto;
     background: var(--color-primary);
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: var(--padding-small);
+	margin: var(--margin-small);
     border-radius: var(--border-radius-small);
     height: auto;
 }
 
 .message-container {
     position: relative;
-    padding: 20px;
-    margin-bottom: 5px;
+    padding: var(--padding-small);
+}
+
+.message-edited {
+    color: var(--color-text-light);
+    padding: 0;
+    border: 0;
 }
 
 .message-date {
     font-size: var(--font-size-small);
     color: var(--color-text-muted);
-    margin-bottom: 3px;
     display: inline-block;
 }
 
 .message-toolbar {
     position: absolute;
-    top: 5px;
-    right: 5px;
+    top: 0px;
+    right: 0px;
     display: flex;
-    gap: 5px;
 }
 
 .flashcard {
     position: relative;
-    padding: 5px;
-    margin-bottom: 5px;
+    padding: var(--padding-small);
+    margin: var(--margin-small);
     border-radius: var(--border-radius-small);
     background: var(--color-primary);
 }
@@ -243,28 +230,22 @@ button.remove-btn:hover {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 5px;
     flex-wrap: wrap;
 }
 
 .answer-row {
     display: flex;
     align-items: center;
-    gap: 5px;
-    margin-bottom: 5px;
-}
-
-#answers-container {
-    margin-top: 5px;
-    margin-bottom: 5px;
 }
 
 .correct-highlight {
     background: linear-gradient(90deg, var(--color-success-bg), #00000000);
+    border-radius: var(--border-radius-small);
 }
 
 .incorrect-highlight {
     background: linear-gradient(90deg, var(--color-error-bg), #00000000);
+    border-radius: var(--border-radius-small);
 }
 
 .whiteboard-container {
@@ -274,6 +255,7 @@ button.remove-btn:hover {
 }
 
 .whiteboard-context {
+    margin: var(--margin-small);
     border-radius: var(--border-radius-small);
     transition: transform 0.3s ease-in-out;
 }
@@ -287,9 +269,7 @@ button.remove-btn:hover {
 .code-runner-wrapper {
     flex: 1;
     display: grid;
-    grid-template-rows: 1fr 100px;
-    grid-row-gap: 10px;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .code-runner-textarea {
@@ -307,7 +287,8 @@ button.remove-btn:hover {
     width: 100%;
     background: var(--color-primary);
     border-radius: var(--border-radius-small);
-    padding: 10px;
+    padding: var(--padding-small);
+    margin: var(--margin-small);
     box-sizing: border-box;
     overflow-y: auto;
 }
@@ -315,19 +296,18 @@ button.remove-btn:hover {
 .run-btn {
     position: absolute;
     top: 10px;
-    right: 10px;
+    right: 5px;
     z-index: 10;
 }
 
 .reminder-container {
-    padding: 10px;
+    padding: var(--padding-small);
+    margin: var(--margin-small);
     background: var(--color-white);
-    margin-bottom: 10px;
 }
 
 .toolbar {
     display: flex;
-    gap: 5px;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-start;
@@ -388,7 +368,8 @@ input[type="datetime-local"],
 input[type="file"],
 textarea {
     width: 100%;
-    padding: var(--input-padding);
+    padding: var(--padding-small);
+    margin: var(--margin-small);
     border: 1px solid var(--color-primary);
     border-radius: var(--border-radius-small);
     font-family: var(--font-family);
@@ -397,6 +378,7 @@ textarea {
     background-color: var(--color-primary);
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
     box-sizing: border-box;
+    resize: none;
 }
 
 input[type="text"]:focus,
@@ -416,18 +398,10 @@ textarea::placeholder {
     color: var(--color-text-muted);
 }
 
-input[type="file"] {
-    padding: 0;
-}
-
-textarea {
-    resize: none;
-}
-
 .file-item {
     display: flex;
     align-items: center;
-    padding: 5px;
+    padding: var(--padding-small);
     border-radius: var(--border-radius-small);
     background: var(--color-primary);
     white-space: nowrap;
@@ -442,7 +416,6 @@ input[type="range"] {
     border-radius: 5px;
     outline: none;
     transition: background 0.3s ease;
-    margin: 0;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -478,13 +451,10 @@ input[type="color"] {
     border: none;
     border-radius: var(--border-radius-small);
     cursor: pointer;
-    padding: 0;
-    margin: 0;
     background: none;
 }
 
 input[type="color"]::-webkit-color-swatch-wrapper {
-    padding: 0;
     border-radius: var(--border-radius-small);
 }
 
@@ -514,13 +484,13 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
-    top: 27%;
-    left: 42.5%;
-    width: 6px;
+    top: 50%;
+    left: 50%;
+    width: 5px;
     height: 10px;
     border: solid var(--color-white);
     border-width: 0 2px 2px 0;
-    transform: translate(-30%, -30%) rotate(45deg);
+    transform: translate(-50%, -50%) rotate(45deg);
 }
 
 input[type="checkbox"]:hover {
@@ -536,7 +506,6 @@ input[type="checkbox"]:disabled {
 input[type="checkbox"]:disabled::after {
     border-color: var(--color-accent);
 }
-
 
 ::-webkit-scrollbar {
     width: 20px;
