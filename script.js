@@ -75,7 +75,7 @@
       });
       frag.appendChild(ul);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.17"));
+    frag.appendChild(el("div", { class: "version-text" }, "v1.18"));
     sidebar.appendChild(frag);
     if (!window.sidebarOutsideListenerAdded) {
       const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
@@ -537,19 +537,87 @@ renderFlashcardsList();
 
 };
 
-  
 const renderWhiteboardChannel = (container, channel) => {
+  // Clear and set up container layout.
   container.innerHTML = "";
-  
-  container.style.display = "flex";
-  container.style.flexDirection = "column";
-  
-  
+  Object.assign(container.style, {
+    display: "flex",
+    flexDirection: "column",
+  });
+
+  // Create header and toolbar.
   const headerContainer = el("div", { style: { display: "flex", flexDirection: "column" } });
   headerContainer.appendChild(el("h2", {}, "Whiteboard"));
-  
-  
+
+  // Shared constants.
+  const PATTERN_SIZE = 40,
+        DOT_RADIUS = 1,
+        DOT_COLOR = "#3c3c81",
+        BG_COLOR = "#1a1a2e";
+
+  // --- Helper functions ---
+
+  // Snap the given (x,y) to the underlying grid.
+  const snapCoordinates = (x, y) => {
+    let startXGrid = (offsetX * scale) % PATTERN_SIZE;
+    let startYGrid = (offsetY * scale) % PATTERN_SIZE;
+    if (startXGrid < 0) startXGrid += PATTERN_SIZE;
+    if (startYGrid < 0) startYGrid += PATTERN_SIZE;
+    return {
+      x: startXGrid + Math.round((x - startXGrid) / PATTERN_SIZE) * PATTERN_SIZE,
+      y: startYGrid + Math.round((y - startYGrid) / PATTERN_SIZE) * PATTERN_SIZE,
+    };
+  };
+
+  // Helper to test if a point (px,py) is near a line segment (x0,y0)-(x1,y1)
+  // within a given tolerance (adjusted by the line’s own thickness).
+  const isNearLine = (x0, y0, x1, y1, px, py, tolerance, lineWidth) => {
+    const A = px - x0;
+    const B = py - y0;
+    const C = x1 - x0;
+    const D = y1 - y0;
+    const dot = A * C + B * D;
+    const len_sq = C * C + D * D;
+    let param = (len_sq !== 0) ? dot / len_sq : -1;
+    let xx, yy;
+    if (param < 0) {
+      xx = x0;
+      yy = y0;
+    } else if (param > 1) {
+      xx = x1;
+      yy = y1;
+    } else {
+      xx = x0 + param * C;
+      yy = y0 + param * D;
+    }
+    const dx = px - xx;
+    const dy = py - yy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    return dist <= tolerance + lineWidth / 2;
+  };
+
+  // Create a zoom button (in/out based on isZoomIn flag).
+  const createZoomButton = (isZoomIn) => {
+    return el("button", {
+      onclick: () => {
+        const factor = 2,
+              cx = canvas.width / 2,
+              cy = canvas.height / 2;
+        const newScale = isZoomIn ? scale * factor : scale / (factor * factor);
+        // Adjust offsets so that the zoom centers around the canvas center.
+        offsetX += cx * (1 / newScale - 1 / scale);
+        offsetY += cy * (1 / newScale - 1 / scale);
+        scale = newScale;
+        redrawCanvas();
+        whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
+      }
+    }, isZoomIn ? "Zoom In" : "Zoom Out");
+  };
+
+  // --- Toolbar UI Elements ---
+
   const toolbar = el("div", { class: "toolbar", style: { display: "flex" } });
+  
   const colorPicker = el("input", { 
     type: "color", 
     value: "#ffffff",
@@ -559,6 +627,7 @@ const renderWhiteboardChannel = (container, channel) => {
       eraserButton.style.backgroundColor = ""; 
     } 
   });
+
   const sizeSlider = el("input", { 
     type: "range", 
     min: "1", 
@@ -569,40 +638,25 @@ const renderWhiteboardChannel = (container, channel) => {
       drawCursorCircle(); 
     } 
   });
+
   const eraserButton = el("button", { 
     onclick: () => { 
       eraserMode = !eraserMode; 
       eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : ""; 
-    } 
+    }
   }, "Eraser");
+
   const panModeButton = el("button", { 
     onclick: () => { 
       panMode = !panMode; 
       panModeButton.style.backgroundColor = panMode ? "var(--color-accent)" : ""; 
       redrawCanvas(); 
-    } 
+    }
   }, "Pan Mode");
-  const zoomInButton = el("button", { 
-    onclick: () => {
-      const factor = 2, newScale = scale * factor, cx = canvas.width / 2, cy = canvas.height / 2;
-      offsetX += cx * (1 / newScale - 1 / scale);
-      offsetY += cy * (1 / newScale - 1 / scale); 
-      scale = newScale;
-      redrawCanvas(); 
-      whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-    } 
-  }, "Zoom In");
-  const zoomOutButton = el("button", { 
-    onclick: () => {
-      const factor = 2, newScale = scale / (factor * factor), cx = canvas.width / 2, cy = canvas.height / 2;
-      offsetX += cx * (1 / newScale - 1 / scale);
-      offsetY += cy * (1 / newScale - 1 / scale); 
-      scale = newScale;
-      redrawCanvas(); 
-      whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-    } 
-  }, "Zoom Out");
-  
+
+  const zoomInButton = createZoomButton(true);
+  const zoomOutButton = createZoomButton(false);
+
   const snapButton = el("button", {
     onclick: () => { 
       snapMode = !snapMode;
@@ -610,23 +664,41 @@ const renderWhiteboardChannel = (container, channel) => {
     }
   }, "Snap");
 
-  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton);
+  const stampButton = el("button", {
+    onclick: () => {
+      stampMode = !stampMode;
+      stampButton.style.backgroundColor = stampMode ? "var(--color-accent)" : "";
+      if (stampMode) {
+        canvas.style.cursor = "crosshair";
+        stampApplyButton.style.display = "block";
+      } else {
+        canvas.style.cursor = "none";
+        stampApplyButton.style.display = "none";
+        brushStampData = null; // Reset any saved stamp vector data.
+        stampArea = null; // Clear the selected area
+        redrawCanvas(); // Redraw the canvas to remove the selection
+      }
+    }
+  }, "Stamp");
+
+  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton, stampButton);
   headerContainer.appendChild(toolbar);
   container.appendChild(headerContainer);
-  
-  
+
+  // --- Canvas Setup ---
+
   const canvasWrapper = el("div", { style: { flex: "1", position: "relative", overflow: "hidden" } });
   container.appendChild(canvasWrapper);
-  
-  
+
   const canvas = el("canvas");
-  canvas.style.cursor = "none";
+  canvas.style.cursor = "none"; // Hide the default cursor.
   canvasWrapper.appendChild(canvas);
   const context = canvas.getContext("2d");
   canvas.classList.add("whiteboard-context");
   document.oncontextmenu = () => false;
 
-  
+  // --- Data Initialization ---
+
   window.whiteboardData[channel] = window.whiteboardData[channel] || [];
   const drawings = window.whiteboardData[channel];
   window.whiteboardPanZoomData = window.whiteboardPanZoomData || {};
@@ -635,55 +707,56 @@ const renderWhiteboardChannel = (container, channel) => {
   let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
       cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
       brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false,
-      snapMode = false; 
-  
-  const toScreenX = x => (x + offsetX) * scale,
-        toScreenY = y => (y + offsetY) * scale,
-        toTrueX = x => (x / scale) - offsetX,
-        toTrueY = y => (y / scale) - offsetY; 
-  
+      snapMode = false, stampMode = false, stampArea = null;
+
+  // When a stamp is captured, its vector data is stored here.
+  let brushStampData = null; 
+  let stampDataWidth = 0, stampDataHeight = 0;
+
+  // --- Coordinate Conversion Functions ---
+  const toScreenX = x => (x + offsetX) * scale;
+  const toScreenY = y => (y + offsetY) * scale;
+  const toTrueX = x => (x / scale) - offsetX;
+  const toTrueY = y => (y / scale) - offsetY; 
+
+  // --- Drawing Functions ---
+
   const redrawCanvas = () => {
     canvas.width = canvasWrapper.clientWidth;
     canvas.height = canvasWrapper.clientHeight;
-
-    
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    
-    const patternSize = 40;
-    const dotRadius = 1;
-    const dotColor = '#3c3c81';
-    const backgroundColor = '#1a1a2e';
-
-    
-    let startX = (offsetX * scale) % patternSize;
-    let startY = (offsetY * scale) % patternSize;
-    if (startX < 0) startX += patternSize;
-    if (startY < 0) startY += patternSize;
-
-    
-    context.fillStyle = backgroundColor;
+    // Draw background pattern.
+    context.fillStyle = BG_COLOR;
     context.fillRect(0, 0, canvas.width, canvas.height);
-
-    
-    context.fillStyle = dotColor;
-    for (let x = startX; x < canvas.width; x += patternSize) {
-      for (let y = startY; y < canvas.height; y += patternSize) {
+    let startX = (offsetX * scale) % PATTERN_SIZE;
+    let startY = (offsetY * scale) % PATTERN_SIZE;
+    if (startX < 0) startX += PATTERN_SIZE;
+    if (startY < 0) startY += PATTERN_SIZE;
+    context.fillStyle = DOT_COLOR;
+    for (let x = startX; x < canvas.width; x += PATTERN_SIZE) {
+      for (let y = startY; y < canvas.height; y += PATTERN_SIZE) {
         context.beginPath();
-        context.arc(x, y, dotRadius, 0, Math.PI * 2);
+        context.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
         context.fill();
       }
     }
-
     
-    drawings.forEach(line => {
-      drawLine(toScreenX(line.x0), toScreenY(line.y0), toScreenX(line.x1), toScreenY(line.y1), line.color, line.size);
+    // Redraw stored drawings.
+    drawings.forEach(item => {
+      if (item.type === "line") {
+        drawLine(
+          toScreenX(item.x0), toScreenY(item.y0),
+          toScreenX(item.x1), toScreenY(item.y1),
+          item.color, item.size
+        );
+      }
     });
-
+    
     drawAxes();
+    if (stampArea) drawStampArea();
   };
       
-
   const drawLine = (x0, y0, x1, y1, color, size) => {
     context.beginPath();
     context.moveTo(x0, y0);
@@ -693,12 +766,12 @@ const renderWhiteboardChannel = (container, channel) => {
     context.lineCap = "round";
     context.stroke();
   };
-
+  
   const drawAxes = () => {
     if (!panMode) return; 
     const cx = canvas.width / 2, cy = canvas.height / 2;
     context.save();
-    context.strokeStyle = "#3c3c81"; 
+    context.strokeStyle = DOT_COLOR; 
     context.lineWidth = 1;
     
     context.beginPath();
@@ -712,153 +785,243 @@ const renderWhiteboardChannel = (container, channel) => {
     context.stroke();
     context.restore();
   };
-
-  const isNearLine = (x0, y0, x1, y1, px, py, thr, brushSize) => {
-    const A = px - x0, B = py - y0, C = x1 - x0, D = y1 - y0,
-          dot = A * C + B * D, lenSq = C * C + D * D, param = lenSq ? dot / lenSq : -1;
-    const [nx, ny] = param < 0 ? [x0, y0] : param > 1 ? [x1, y1] : [x0 + param * C, y0 + param * D];
-    return Math.hypot(px - nx, py - ny) <= (thr + brushSize / 2);
+  
+  // Draw selection rectangle for stamp mode.
+  const drawStampArea = () => {
+    if (!stampArea) return;
+    const selLeft = Math.min(stampArea.x0, stampArea.x1),
+          selRight = Math.max(stampArea.x0, stampArea.x1),
+          selTop = Math.min(stampArea.y0, stampArea.y1),
+          selBottom = Math.max(stampArea.y0, stampArea.y1);
+    const screenX = toScreenX(selLeft),
+          screenY = toScreenY(selTop),
+          screenWidth = toScreenX(selRight) - toScreenX(selLeft),
+          screenHeight = toScreenY(selBottom) - toScreenY(selTop);
+    context.save();
+    context.strokeStyle = "#3c3c81";
+    context.lineWidth = 2;
+    context.setLineDash([5, 5]);
+    context.strokeRect(screenX, screenY, screenWidth, screenHeight);
+    context.restore();
   };
-
+  
+  // When a stamp has been captured, draw its preview at the cursor.
+  const drawStampPreview = () => {
+    if (!brushStampData) return;
+    let pasteX = toTrueX(cursorX) - stampDataWidth / 2;
+    let pasteY = toTrueY(cursorY) - stampDataHeight / 2;
+    if (snapMode) {
+      ({ x: pasteX, y: pasteY } = snapCoordinates(pasteX, pasteY));
+    }
+    brushStampData.forEach(item => {
+      if (item.type === "line") {
+        const x0 = pasteX + item.x0,
+              y0 = pasteY + item.y0,
+              x1 = pasteX + item.x1,
+              y1 = pasteY + item.y1;
+        drawLine(toScreenX(x0), toScreenY(y0), toScreenX(x1), toScreenY(y1), item.color, item.size);
+      }
+    });
+  };
+  
+  // The cursor drawing function shows either the stamp preview or a normal cursor.
   const drawCursorCircle = () => {
     redrawCanvas();
-    const dispSize = eraserMode ? brushSize * 4 : brushSize;
-    context.beginPath();
-    context.arc(cursorX, cursorY, dispSize / 2, 0, Math.PI * 2);
-    context.strokeStyle = eraserMode ? "red" : "white";
-    context.lineWidth = 1;
-    context.stroke();
+    if (stampMode && brushStampData) {
+      drawStampPreview();
+    } else {
+      const dispSize = eraserMode ? brushSize * 4 : brushSize;
+      context.beginPath();
+      context.arc(cursorX, cursorY, dispSize / 2, 0, Math.PI * 2);
+      context.strokeStyle = eraserMode ? "red" : "white";
+      context.lineWidth = 1;
+      context.stroke();
+    }
   };
+  
+  // --- Mouse and Touch Event Handlers ---
 
-  let leftMouseDown = false;
-  canvas.addEventListener("mousedown", e => {
-    if (e.button === 0) leftMouseDown = true;
-    
-    let x = e.offsetX, y = e.offsetY;
+let leftMouseDown = false;
+
+const getTouchPos = (canvas, touchEvent) => {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: touchEvent.touches[0].clientX - rect.left,
+    y: touchEvent.touches[0].clientY - rect.top
+  };
+};
+
+canvas.addEventListener("mousedown", e => {
+  if (e.button !== 0) return; // Only handle left-click.
+  handleStart(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const touchPos = getTouchPos(canvas, e);
+  handleStart(touchPos.x, touchPos.y);
+});
+
+const handleStart = (x, y) => {
+  // In stamp mode with a saved stamp, paste it immediately.
+  if (stampMode && brushStampData) {
+    let pasteX = toTrueX(x) - stampDataWidth / 2;
+    let pasteY = toTrueY(y) - stampDataHeight / 2;
     if (snapMode) {
-      const patternSize = 40;
-      let startXGrid = (offsetX * scale) % patternSize;
-      let startYGrid = (offsetY * scale) % patternSize;
-      if (startXGrid < 0) startXGrid += patternSize;
-      if (startYGrid < 0) startYGrid += patternSize;
-      x = startXGrid + Math.round((x - startXGrid) / patternSize) * patternSize;
-      y = startYGrid + Math.round((y - startYGrid) / patternSize) * patternSize;
+      ({ x: pasteX, y: pasteY } = snapCoordinates(pasteX, pasteY));
     }
-    cursorX = prevCursorX = x;
-    cursorY = prevCursorY = y;
-  });
-  canvas.addEventListener("mousemove", e => {
-    
-    let x = e.offsetX, y = e.offsetY;
-    if (snapMode) {
-      const patternSize = 40;
-      let startXGrid = (offsetX * scale) % patternSize;
-      let startYGrid = (offsetY * scale) % patternSize;
-      if (startXGrid < 0) startXGrid += patternSize;
-      if (startYGrid < 0) startYGrid += patternSize;
-      x = startXGrid + Math.round((x - startXGrid) / patternSize) * patternSize;
-      y = startYGrid + Math.round((y - startYGrid) / patternSize) * patternSize;
-    }
-    cursorX = x;
-    cursorY = y;
-    if (leftMouseDown) {
-      if (panMode) {
-        offsetX += (cursorX - prevCursorX) / scale;
-        offsetY += (cursorY - prevCursorY) / scale;
-        redrawCanvas();
-        
-        whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-      } else {
-        const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
-              psx = toTrueX(prevCursorX), psy = toTrueY(prevCursorY);
-        if (eraserMode) {
-          for (let i = drawings.length - 1; i >= 0; i--)
-            if (isNearLine(drawings[i].x0, drawings[i].y0, drawings[i].x1, drawings[i].y1, sx, sy, (brushSize / scale) * 2, drawings[i].size))
-              drawings.splice(i, 1);
-          window.whiteboardData[channel] = drawings;
-          redrawCanvas();
-        } else {
-          drawings.push({ x0: psx, y0: psy, x1: sx, y1: sy, color: brushColor, size: brushSize });
-          drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
-        }
+    brushStampData.forEach(item => {
+      if (item.type === "line") {
+        drawings.push({
+          type: "line",
+          x0: item.x0 + pasteX,
+          y0: item.y0 + pasteY,
+          x1: item.x1 + pasteX,
+          y1: item.y1 + pasteY,
+          color: item.color,
+          size: item.size
+        });
       }
-    }
-    prevCursorX = cursorX;
-    prevCursorY = cursorY;
-    drawCursorCircle();
-  });
-  
-  canvas.addEventListener("mouseup", () => leftMouseDown = false);
-  const prevTouches = [null];
-  canvas.addEventListener("touchstart", e => { if (e.touches.length) prevTouches[0] = e.touches[0]; });
-  canvas.addEventListener("touchmove", e => {
-    e.preventDefault();
-    const rect = canvas.getBoundingClientRect();
-    if (e.touches.length !== 1) return;
-    const touch = e.touches[0];
-  
-    const patternSize = 40;
-    let startXGrid = (offsetX * scale) % patternSize;
-    let startYGrid = (offsetY * scale) % patternSize;
-    if (startXGrid < 0) startXGrid += patternSize;
-    if (startYGrid < 0) startYGrid += patternSize;
-  
-    const rawX = touch.clientX - rect.left;
-    const rawY = touch.clientY - rect.top;
-    let snappedX = rawX, snappedY = rawY;
-    if (snapMode) {
-      snappedX = startXGrid + Math.round((rawX - startXGrid) / patternSize) * patternSize;
-      snappedY = startYGrid + Math.round((rawY - startYGrid) / patternSize) * patternSize;
-    }
-    cursorX = snappedX;
-    cursorY = snappedY;
-  
+    });
+    window.whiteboardData[channel] = drawings;
+    redrawCanvas();
+    return; // Do not start a new drawing.
+  }
+
+  leftMouseDown = true;
+  if (snapMode) ({ x, y } = snapCoordinates(x, y));
+  cursorX = prevCursorX = x;
+  cursorY = prevCursorY = y;
+
+  // Begin a stamp selection if in stamp mode and no stamp is captured yet.
+  if (stampMode && !brushStampData) {
+    const trueX = toTrueX(x), trueY = toTrueY(y);
+    stampArea = { x0: trueX, y0: trueY, x1: trueX, y1: trueY };
+  }
+};
+
+canvas.addEventListener("mousemove", e => {
+  handleMove(e.offsetX, e.offsetY);
+});
+
+canvas.addEventListener("touchmove", e => {
+  e.preventDefault();
+  const touchPos = getTouchPos(canvas, e);
+  handleMove(touchPos.x, touchPos.y);
+});
+
+const handleMove = (x, y) => {
+  if (snapMode) ({ x, y } = snapCoordinates(x, y));
+  cursorX = x;
+  cursorY = y;
+
+  if (leftMouseDown) {
     if (panMode) {
-      const prevTouch = prevTouches[0];
-      const rawPrevX = prevTouch.clientX - rect.left;
-      const rawPrevY = prevTouch.clientY - rect.top;
-      let snappedPrevX = rawPrevX, snappedPrevY = rawPrevY;
-      if (snapMode) {
-        snappedPrevX = startXGrid + Math.round((rawPrevX - startXGrid) / patternSize) * patternSize;
-        snappedPrevY = startYGrid + Math.round((rawPrevY - startYGrid) / patternSize) * patternSize;
-      }
-      offsetX += (snappedX - snappedPrevX) / scale;
-      offsetY += (snappedY - snappedPrevY) / scale; 
+      offsetX += (cursorX - prevCursorX) / scale;
+      offsetY += (cursorY - prevCursorY) / scale;
       redrawCanvas();
       whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-      prevTouches[0] = touch;
-    } else {
-      const prevTouch = prevTouches[0];
-      const rawPrevX = prevTouch.clientX - rect.left;
-      const rawPrevY = prevTouch.clientY - rect.top;
-      let snappedPrevX = rawPrevX, snappedPrevY = rawPrevY;
-      if (snapMode) {
-        snappedPrevX = startXGrid + Math.round((rawPrevX - startXGrid) / patternSize) * patternSize;
-        snappedPrevY = startYGrid + Math.round((rawPrevY - startYGrid) / patternSize) * patternSize;
-      }
-      
-      
-      const sx = toTrueX(snappedX), sy = toTrueY(snappedY);
-      const psx = toTrueX(snappedPrevX), psy = toTrueY(snappedPrevY);
-      
-      if (eraserMode) {
-        for (let i = drawings.length - 1; i >= 0; i--) {
-          if (isNearLine(drawings[i].x0, drawings[i].y0, drawings[i].x1, drawings[i].y1, sx, sy, (brushSize / scale) * 2, drawings[i].size))
-            drawings.splice(i, 1);
+    } else if (stampMode && !brushStampData && stampArea) {
+      stampArea.x1 = toTrueX(x);
+      stampArea.y1 = toTrueY(y);
+      redrawCanvas();
+    } else if (eraserMode) {
+      // Instead of erasing only at the current point, sample several points
+      // along the line from the previous to the current cursor positions
+      // so that fast movements still “erase” continuously.
+      const distance = Math.hypot(cursorX - prevCursorX, cursorY - prevCursorY);
+      const samples = Math.max(Math.ceil(distance / (brushSize / 2)), 1);
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const sampleX = toTrueX(prevCursorX + (cursorX - prevCursorX) * t);
+        const sampleY = toTrueY(prevCursorY + (cursorY - prevCursorY) * t);
+        for (let j = drawings.length - 1; j >= 0; j--) {
+          const d = drawings[j];
+          if (d.type === "line" &&
+              isNearLine(d.x0, d.y0, d.x1, d.y1, sampleX, sampleY, (brushSize / scale) * 2, d.size))
+            drawings.splice(j, 1);
         }
-        window.whiteboardData[channel] = drawings;
-        redrawCanvas();
-      } else {
-        drawings.push({ x0: psx, y0: psy, x1: sx, y1: sy, color: brushColor, size: brushSize });
-        drawLine(snappedPrevX, snappedPrevY, snappedX, snappedY, brushColor, brushSize);
-        window.whiteboardData[channel] = drawings;
       }
-      prevTouches[0] = touch;
+      window.whiteboardData[channel] = drawings;
+      redrawCanvas();
+    } else {
+      // Normal drawing mode.
+      const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
+            psx = toTrueX(prevCursorX), psy = toTrueY(prevCursorY);
+      drawings.push({ 
+        type: "line",
+        x0: psx, y0: psy, 
+        x1: sx, y1: sy, 
+        color: brushColor, size: brushSize 
+      });
+      drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
     }
-    drawCursorCircle();
-  });
+  }
+  prevCursorX = cursorX;
+  prevCursorY = cursorY;
+  drawCursorCircle();
+};
+
+canvas.addEventListener("mouseup", () => {
+  leftMouseDown = false;
+  if (stampMode && !brushStampData && stampArea) {
+    drawStampArea();
+  }
+});
+
+canvas.addEventListener("touchend", e => {
+  e.preventDefault();
+  leftMouseDown = false;
+  if (stampMode && !brushStampData && stampArea) {
+    drawStampArea();
+  }
+});
+
+// --- Stamp Application ---
   
-  canvas.addEventListener("touchend", e => { if (e.touches.length === 0) prevTouches[0] = null; });
+  // Utility: Check if a line is entirely inside the given rectangle.
+  const isLineInsideRect = (line, left, top, right, bottom) =>
+    (line.x0 >= left && line.x0 <= right &&
+     line.y0 >= top  && line.y0 <= bottom &&
+     line.x1 >= left && line.x1 <= right &&
+     line.y1 >= top  && line.y1 <= bottom);
+  
+  // Extract vector data for lines inside the stamp area.
+  const applyStamp = () => {
+    if (!stampArea) return;
+    const selLeft = Math.min(stampArea.x0, stampArea.x1),
+          selRight = Math.max(stampArea.x0, stampArea.x1),
+          selTop = Math.min(stampArea.y0, stampArea.y1),
+          selBottom = Math.max(stampArea.y0, stampArea.y1);
+    stampDataWidth = selRight - selLeft;
+    stampDataHeight = selBottom - selTop;
+    const stampVectorData = drawings.filter(item =>
+      item.type === "line" && isLineInsideRect(item, selLeft, selTop, selRight, selBottom)
+    );
+    // Normalize the vector data relative to the selection's top-left.
+    brushStampData = stampVectorData.map(item => ({
+      type: "line",
+      x0: item.x0 - selLeft,
+      y0: item.y0 - selTop,
+      x1: item.x1 - selLeft,
+      y1: item.y1 - selTop,
+      color: item.color,
+      size: item.size
+    }));
+    
+    stampArea = null;
+    stampApplyButton.style.display = "none";
+    redrawCanvas();
+  };
+  
+  const stampApplyButton = el("button", {
+    onclick: applyStamp,
+    style: { display: "none" }
+  }, "Apply Stamp");
+  
+  toolbar.appendChild(stampApplyButton);
+  
+  // --- Final Setup ---
   window.addEventListener("resize", redrawCanvas);
   redrawCanvas();
 };
