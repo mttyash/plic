@@ -75,7 +75,7 @@
       });
       frag.appendChild(ul);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.18"));
+    frag.appendChild(el("div", { class: "version-text" }, "v1.19"));
     sidebar.appendChild(frag);
     if (!window.sidebarOutsideListenerAdded) {
       const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
@@ -319,14 +319,13 @@
     chatContainer.appendChild(form);
     container.appendChild(chatContainer);
   };
-
   
   const renderFlashcardChannel = (container, channel) => {
     container.innerHTML = "";
     const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
     titleContainer.appendChild(el("h2", {}, "Flashcard Maker & Tester"));
   
-    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap" } });
+    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
     buttonContainer.appendChild(el("button", { type: "button", onclick: () => {
         const data = flashcards[channel.id] || [];
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -550,7 +549,7 @@ const renderWhiteboardChannel = (container, channel) => {
   headerContainer.appendChild(el("h2", {}, "Whiteboard"));
 
   // Shared constants.
-  const PATTERN_SIZE = 40,
+  const PATTERN_SIZE = 20,
         DOT_RADIUS = 1,
         DOT_COLOR = "#3c3c81",
         BG_COLOR = "#1a1a2e";
@@ -570,7 +569,7 @@ const renderWhiteboardChannel = (container, channel) => {
   };
 
   // Helper to test if a point (px,py) is near a line segment (x0,y0)-(x1,y1)
-  // within a given tolerance (adjusted by the line’s own thickness).
+  // within a given tolerance (adjusted by the line's own thickness).
   const isNearLine = (x0, y0, x1, y1, px, py, tolerance, lineWidth) => {
     const A = px - x0;
     const B = py - y0;
@@ -623,8 +622,13 @@ const renderWhiteboardChannel = (container, channel) => {
     value: "#ffffff",
     onchange: e => { 
       brushColor = e.target.value; 
+      
       eraserMode = false; 
       eraserButton.style.backgroundColor = ""; 
+      panMode = false;
+      panModeButton.style.backgroundColor = ""; 
+      selectMode = false;
+      selectButton.style.backgroundColor = "";
     } 
   });
 
@@ -642,6 +646,12 @@ const renderWhiteboardChannel = (container, channel) => {
   const eraserButton = el("button", { 
     onclick: () => { 
       eraserMode = !eraserMode; 
+      
+      panMode = false;
+      panModeButton.style.backgroundColor = ""; 
+      selectMode = false;
+      selectButton.style.backgroundColor = "";
+
       eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : ""; 
     }
   }, "Eraser");
@@ -649,10 +659,16 @@ const renderWhiteboardChannel = (container, channel) => {
   const panModeButton = el("button", { 
     onclick: () => { 
       panMode = !panMode; 
+
+      eraserMode = false;
+      eraserButton.style.backgroundColor = ""; 
+      selectMode = false;
+      selectButton.style.backgroundColor = "";
+
       panModeButton.style.backgroundColor = panMode ? "var(--color-accent)" : ""; 
       redrawCanvas(); 
     }
-  }, "Pan Mode");
+  }, "Pan");
 
   const zoomInButton = createZoomButton(true);
   const zoomOutButton = createZoomButton(false);
@@ -664,24 +680,92 @@ const renderWhiteboardChannel = (container, channel) => {
     }
   }, "Snap");
 
-  const stampButton = el("button", {
+  const selectButton = el("button", {
     onclick: () => {
-      stampMode = !stampMode;
-      stampButton.style.backgroundColor = stampMode ? "var(--color-accent)" : "";
-      if (stampMode) {
+      selectMode = !selectMode;
+
+      eraserMode = false;
+      eraserButton.style.backgroundColor = "";
+      panMode = false;
+      panModeButton.style.backgroundColor = ""; 
+
+      selectButton.style.backgroundColor = selectMode ? "var(--color-accent)" : "";
+      if (selectMode) {
         canvas.style.cursor = "crosshair";
-        stampApplyButton.style.display = "block";
+        copySelectButton.disabled = false;
+        cutSelectButton.disabled = false;
       } else {
         canvas.style.cursor = "none";
-        stampApplyButton.style.display = "none";
-        brushStampData = null; // Reset any saved stamp vector data.
-        stampArea = null; // Clear the selected area
+        copySelectButton.disabled = true;
+        cutSelectButton.disabled = true;
+        brushSelectData = null; // Reset any saved select vector data.
+        selectArea = null; // Clear the selected area
         redrawCanvas(); // Redraw the canvas to remove the selection
       }
     }
-  }, "Stamp");
+  }, "Select");
 
-  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton, stampButton);
+  // Extract vector data for lines inside the select area.
+  const processSelection = (shouldCut = false) => {
+    if (!selectArea) return;
+    const selLeft = Math.min(selectArea.x0, selectArea.x1),
+          selRight = Math.max(selectArea.x0, selectArea.x1),
+          selTop = Math.min(selectArea.y0, selectArea.y1),
+          selBottom = Math.max(selectArea.y0, selectArea.y1);
+    selectDataWidth = selRight - selLeft;
+    selectDataHeight = selBottom - selTop;
+    
+    // Find lines that are inside the selection area
+    const selectVectorData = [];
+    const drawingsToRemove = [];
+    
+    for (let i = 0; i < drawings.length; i++) {
+      const item = drawings[i];
+      if (item.type === "line" && isLineInsideRect(item, selLeft, selTop, selRight, selBottom)) {
+        selectVectorData.push(item);
+        if (shouldCut) {
+          drawingsToRemove.push(i);
+        }
+      }
+    }
+    
+    // Normalize the vector data relative to the selection's top-left.
+    brushSelectData = selectVectorData.map(item => ({
+      type: "line",
+      x0: item.x0 - selLeft,
+      y0: item.y0 - selTop,
+      x1: item.x1 - selLeft,
+      y1: item.y1 - selTop,
+      color: item.color,
+      size: item.size
+    }));
+    
+    // If we're cutting, remove the selected lines
+    if (shouldCut && drawingsToRemove.length > 0) {
+      // Remove items from the end to not affect indices
+      for (let i = drawingsToRemove.length - 1; i >= 0; i--) {
+        drawings.splice(drawingsToRemove[i], 1);
+      }
+      window.whiteboardData[channel] = drawings;
+    }
+    
+    selectArea = null;
+    copySelectButton.disabled = true;
+    cutSelectButton.disabled = true;
+    redrawCanvas();
+  };
+  
+  const copySelectButton = el("button", {
+    onclick: () => processSelection(false),
+    disabled: true
+  }, "Copy");
+  
+  const cutSelectButton = el("button", {
+    onclick: () => processSelection(true),
+    disabled: true
+  }, "Cut");
+
+  toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton, selectButton, copySelectButton, cutSelectButton);
   headerContainer.appendChild(toolbar);
   container.appendChild(headerContainer);
 
@@ -707,11 +791,11 @@ const renderWhiteboardChannel = (container, channel) => {
   let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
       cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
       brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false,
-      snapMode = false, stampMode = false, stampArea = null;
+      snapMode = false, selectMode = false, selectArea = null;
 
-  // When a stamp is captured, its vector data is stored here.
-  let brushStampData = null; 
-  let stampDataWidth = 0, stampDataHeight = 0;
+  // When a select is captured, its vector data is stored here.
+  let brushSelectData = null; 
+  let selectDataWidth = 0, selectDataHeight = 0;
 
   // --- Coordinate Conversion Functions ---
   const toScreenX = x => (x + offsetX) * scale;
@@ -754,7 +838,7 @@ const renderWhiteboardChannel = (container, channel) => {
     });
     
     drawAxes();
-    if (stampArea) drawStampArea();
+    if (selectArea) drawSelectArea();
   };
       
   const drawLine = (x0, y0, x1, y1, color, size) => {
@@ -786,13 +870,13 @@ const renderWhiteboardChannel = (container, channel) => {
     context.restore();
   };
   
-  // Draw selection rectangle for stamp mode.
-  const drawStampArea = () => {
-    if (!stampArea) return;
-    const selLeft = Math.min(stampArea.x0, stampArea.x1),
-          selRight = Math.max(stampArea.x0, stampArea.x1),
-          selTop = Math.min(stampArea.y0, stampArea.y1),
-          selBottom = Math.max(stampArea.y0, stampArea.y1);
+  // Draw selection rectangle for select mode.
+  const drawSelectArea = () => {
+    if (!selectArea) return;
+    const selLeft = Math.min(selectArea.x0, selectArea.x1),
+          selRight = Math.max(selectArea.x0, selectArea.x1),
+          selTop = Math.min(selectArea.y0, selectArea.y1),
+          selBottom = Math.max(selectArea.y0, selectArea.y1);
     const screenX = toScreenX(selLeft),
           screenY = toScreenY(selTop),
           screenWidth = toScreenX(selRight) - toScreenX(selLeft),
@@ -805,15 +889,17 @@ const renderWhiteboardChannel = (container, channel) => {
     context.restore();
   };
   
-  // When a stamp has been captured, draw its preview at the cursor.
-  const drawStampPreview = () => {
-    if (!brushStampData) return;
-    let pasteX = toTrueX(cursorX) - stampDataWidth / 2;
-    let pasteY = toTrueY(cursorY) - stampDataHeight / 2;
+  // When a select has been captured, draw its preview at the cursor.
+  const drawSelectPreview = () => {
+    if (!brushSelectData) return;
+    let pasteX = toTrueX(cursorX) - selectDataWidth / 2;
+    let pasteY = toTrueY(cursorY) - selectDataHeight / 2;
     if (snapMode) {
-      ({ x: pasteX, y: pasteY } = snapCoordinates(pasteX, pasteY));
-    }
-    brushStampData.forEach(item => {
+      const snapped = snapCoordinates(toScreenX(pasteX), toScreenY(pasteY));
+      pasteX = toTrueX(snapped.x);
+      pasteY = toTrueY(snapped.y);
+    }    
+    brushSelectData.forEach(item => {
       if (item.type === "line") {
         const x0 = pasteX + item.x0,
               y0 = pasteY + item.y0,
@@ -824,11 +910,11 @@ const renderWhiteboardChannel = (container, channel) => {
     });
   };
   
-  // The cursor drawing function shows either the stamp preview or a normal cursor.
+  // The cursor drawing function shows either the select preview or a normal cursor.
   const drawCursorCircle = () => {
     redrawCanvas();
-    if (stampMode && brushStampData) {
-      drawStampPreview();
+    if (selectMode && brushSelectData) {
+      drawSelectPreview();
     } else {
       const dispSize = eraserMode ? brushSize * 4 : brushSize;
       context.beginPath();
@@ -863,14 +949,14 @@ canvas.addEventListener("touchstart", e => {
 });
 
 const handleStart = (x, y) => {
-  // In stamp mode with a saved stamp, paste it immediately.
-  if (stampMode && brushStampData) {
-    let pasteX = toTrueX(x) - stampDataWidth / 2;
-    let pasteY = toTrueY(y) - stampDataHeight / 2;
+  // In select mode with a saved select, paste it immediately.
+  if (selectMode && brushSelectData) {
+    let pasteX = toTrueX(x) - selectDataWidth / 2;
+    let pasteY = toTrueY(y) - selectDataHeight / 2;
     if (snapMode) {
       ({ x: pasteX, y: pasteY } = snapCoordinates(pasteX, pasteY));
     }
-    brushStampData.forEach(item => {
+    brushSelectData.forEach(item => {
       if (item.type === "line") {
         drawings.push({
           type: "line",
@@ -893,10 +979,10 @@ const handleStart = (x, y) => {
   cursorX = prevCursorX = x;
   cursorY = prevCursorY = y;
 
-  // Begin a stamp selection if in stamp mode and no stamp is captured yet.
-  if (stampMode && !brushStampData) {
+  // Begin a select selection if in select mode and no select is captured yet.
+  if (selectMode && !brushSelectData) {
     const trueX = toTrueX(x), trueY = toTrueY(y);
-    stampArea = { x0: trueX, y0: trueY, x1: trueX, y1: trueY };
+    selectArea = { x0: trueX, y0: trueY, x1: trueX, y1: trueY };
   }
 };
 
@@ -921,14 +1007,14 @@ const handleMove = (x, y) => {
       offsetY += (cursorY - prevCursorY) / scale;
       redrawCanvas();
       whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-    } else if (stampMode && !brushStampData && stampArea) {
-      stampArea.x1 = toTrueX(x);
-      stampArea.y1 = toTrueY(y);
+    } else if (selectMode && !brushSelectData && selectArea) {
+      selectArea.x1 = toTrueX(x);
+      selectArea.y1 = toTrueY(y);
       redrawCanvas();
     } else if (eraserMode) {
       // Instead of erasing only at the current point, sample several points
       // along the line from the previous to the current cursor positions
-      // so that fast movements still “erase” continuously.
+      // so that fast movements still "erase" continuously.
       const distance = Math.hypot(cursorX - prevCursorX, cursorY - prevCursorY);
       const samples = Math.max(Math.ceil(distance / (brushSize / 2)), 1);
       for (let i = 0; i <= samples; i++) {
@@ -964,20 +1050,20 @@ const handleMove = (x, y) => {
 
 canvas.addEventListener("mouseup", () => {
   leftMouseDown = false;
-  if (stampMode && !brushStampData && stampArea) {
-    drawStampArea();
+  if (selectMode && !brushSelectData && selectArea) {
+    drawSelectArea();
   }
 });
 
 canvas.addEventListener("touchend", e => {
   e.preventDefault();
   leftMouseDown = false;
-  if (stampMode && !brushStampData && stampArea) {
-    drawStampArea();
+  if (selectMode && !brushSelectData && selectArea) {
+    drawSelectArea();
   }
 });
 
-// --- Stamp Application ---
+// --- Select Application ---
   
   // Utility: Check if a line is entirely inside the given rectangle.
   const isLineInsideRect = (line, left, top, right, bottom) =>
@@ -986,46 +1072,10 @@ canvas.addEventListener("touchend", e => {
      line.x1 >= left && line.x1 <= right &&
      line.y1 >= top  && line.y1 <= bottom);
   
-  // Extract vector data for lines inside the stamp area.
-  const applyStamp = () => {
-    if (!stampArea) return;
-    const selLeft = Math.min(stampArea.x0, stampArea.x1),
-          selRight = Math.max(stampArea.x0, stampArea.x1),
-          selTop = Math.min(stampArea.y0, stampArea.y1),
-          selBottom = Math.max(stampArea.y0, stampArea.y1);
-    stampDataWidth = selRight - selLeft;
-    stampDataHeight = selBottom - selTop;
-    const stampVectorData = drawings.filter(item =>
-      item.type === "line" && isLineInsideRect(item, selLeft, selTop, selRight, selBottom)
-    );
-    // Normalize the vector data relative to the selection's top-left.
-    brushStampData = stampVectorData.map(item => ({
-      type: "line",
-      x0: item.x0 - selLeft,
-      y0: item.y0 - selTop,
-      x1: item.x1 - selLeft,
-      y1: item.y1 - selTop,
-      color: item.color,
-      size: item.size
-    }));
-    
-    stampArea = null;
-    stampApplyButton.style.display = "none";
-    redrawCanvas();
-  };
-  
-  const stampApplyButton = el("button", {
-    onclick: applyStamp,
-    style: { display: "none" }
-  }, "Apply Stamp");
-  
-  toolbar.appendChild(stampApplyButton);
-  
   // --- Final Setup ---
   window.addEventListener("resize", redrawCanvas);
   redrawCanvas();
-};
-
+};  
   
 const renderCodeChannel = (container, channel) => {
   container.innerHTML = "";
@@ -1042,7 +1092,7 @@ const renderCodeChannel = (container, channel) => {
   });
   headerContainer.appendChild(el("h2", {}, "Code Runner"));
   
-  const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap" } });
+  const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
   const saveBtn = el("button", {}, "Save");
   buttonContainer.appendChild(saveBtn);
   
@@ -1179,7 +1229,6 @@ const renderCodeChannel = (container, channel) => {
     saveBtn.textContent = "Save";
   });
 };
-
   
   const renderReminderChannel = (container, channel) => {
     container.innerHTML = "";
@@ -1242,6 +1291,11 @@ const renderCodeChannel = (container, channel) => {
       style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap" }
     });
   
+    // Track if we're handling a file
+    let isFileMode = false;
+    let fileName = "";
+    let fileType = "";
+  
     // Message section
     const messageWrapper = el("div", { style: { flex: "1", marginRight: "5px" } });
     const messageInput = el("textarea", {
@@ -1264,16 +1318,71 @@ const renderCodeChannel = (container, channel) => {
       }
     }, "Attach File");
   
+    // Clear File button
+    const clearFileBtn = el("button", {
+      onclick: () => {
+        // Reset to text mode
+        isFileMode = false;
+        fileName = "";
+        fileType = "";
+        messageInput.disabled = false;
+        resultOutput.disabled = true;
+        messageInput.value = "";
+        resultOutput.value = "";
+        messageInput.placeholder = "Enter your message here";
+        resultOutput.placeholder = "The result will appear here";
+        clearFileBtn.style.display = "none";
+        attachFileBtn.style.display = "inline";
+        fileInfo.textContent = "";
+        copyMessageBtn.disabled = false;
+        copyResultBtn.disabled = false;
+      },
+      style: { display: "none" }
+    }, "Clear File");
+  
+    // File info display
+    const fileInfo = el("div", {
+      style: { 
+        marginTop: "5px", 
+        fontSize: "12px", 
+        color: "#666"
+      }
+    });
+  
     // Hidden file input element
     const fileInput = el("input", { type: "file", style: { display: "none" } });
     fileInput.addEventListener("change", function() {
       if (fileInput.files && fileInput.files[0]) {
         const file = fileInput.files[0];
+        fileName = file.name;
+        fileType = file.type || "application/octet-stream";
+        
+        // Set to file mode
+        isFileMode = true;
+        messageInput.disabled = true;
+        resultOutput.disabled = true;
+        copyMessageBtn.disabled = true;
+        copyResultBtn.disabled = true;
+        messageInput.placeholder = "File content loaded (binary data)";
+        resultOutput.placeholder = "Encrypted/Decrypted file content will appear here";
+        
+        // Show clear button and hide attach button
+        clearFileBtn.style.display = "inline";
+        attachFileBtn.style.display = "none";
+        
+        // Display file info
+        fileInfo.textContent = `File: ${fileName} (${formatFileSize(file.size)})`;
+        
+        // Read file as ArrayBuffer
         const reader = new FileReader();
         reader.onload = function(e) {
-          messageInput.value = e.target.result;
+          const arrayBuffer = e.target.result;
+          const byteArray = new Uint8Array(arrayBuffer);
+          // Store the actual binary data in a way that preserves it completely
+          messageInput.value = "_BINARY_DATA_"; // Just a placeholder, actual data stored in closure
+          messageInput._binaryData = byteArray; // Store the actual binary data as a property
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
       }
     });
   
@@ -1283,8 +1392,10 @@ const renderCodeChannel = (container, channel) => {
       style: { display: "flex", justifyContent: "space-between" }
     });
     messageButtonContainer.appendChild(attachFileBtn);
+    messageButtonContainer.appendChild(clearFileBtn);
     messageButtonContainer.appendChild(copyMessageBtn);
     messageWrapper.appendChild(messageButtonContainer);
+    messageWrapper.appendChild(fileInfo);
     messageWrapper.appendChild(fileInput);
     textAreaRow.appendChild(messageWrapper);
   
@@ -1297,6 +1408,15 @@ const renderCodeChannel = (container, channel) => {
       class: "code-runner-textarea"
     });
     
+    // Result info display
+    const resultInfo = el("div", {
+      style: { 
+        marginTop: "5px", 
+        fontSize: "12px", 
+        color: "#666"
+      }
+    });
+    
     // Copy Result button
     const copyResultBtn = el("button", {
       onclick: () => {
@@ -1307,15 +1427,47 @@ const renderCodeChannel = (container, channel) => {
     // Download button
     const downloadBtn = el("button", {
       onclick: () => {
-        const blob = new Blob([resultOutput.value], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "result.txt";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (isFileMode && resultOutput._binaryData) {
+          // For binary data, create a blob with the appropriate type
+          let downloadName = fileName;
+          if (downloadName.includes('.')) {
+            // Add .enc for encrypted files or .dec for decrypted files
+            const nameParts = downloadName.split('.');
+            const extension = nameParts.pop();
+            const baseName = nameParts.join('.');
+            
+            if (downloadName.endsWith('.enc')) {
+              // If it was already encrypted and now decrypted, remove .enc
+              downloadName = baseName;
+            } else {
+              // Otherwise add .enc for encrypted files
+              downloadName = `${downloadName}.enc`;
+            }
+          } else {
+            downloadName = `${downloadName}.enc`;
+          }
+          
+          const blob = new Blob([resultOutput._binaryData], { type: fileType });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = downloadName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          // For text data
+          const blob = new Blob([resultOutput.value], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "result.txt";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
       }
     }, "Download");
   
@@ -1327,12 +1479,13 @@ const renderCodeChannel = (container, channel) => {
     resultButtonContainer.appendChild(downloadBtn);
     resultButtonContainer.appendChild(copyResultBtn);
     resultWrapper.appendChild(resultButtonContainer);
+    resultWrapper.appendChild(resultInfo);
     textAreaRow.appendChild(resultWrapper);
   
     formDiv.appendChild(textAreaRow);
   
     const actionRow = el("div", {
-      style: { display: "flex", alignItems: "center", flexWrap: "wrap" }
+      style: { display: "flex", alignItems: "center", flexWrap: "wrap", marginTop: "10px" }
     });
   
     const sliderLabel = el("label", {}, "Password Length: ");
@@ -1364,9 +1517,26 @@ const renderCodeChannel = (container, channel) => {
           return;
         }
         try {
-          resultOutput.value = await encryptMessage(messageInput.value, keyInput.value);
+          if (isFileMode && messageInput._binaryData) {
+            // Handle file encryption
+            const inputBytes = messageInput._binaryData;
+            const [encryptedBytes, iv] = await encryptBytes(inputBytes, keyInput.value);
+            
+            // Store binary data in result
+            resultOutput._binaryData = concatUint8Arrays([iv, encryptedBytes]);
+            resultOutput.value = "_ENCRYPTED_BINARY_DATA_";
+            resultOutput.disabled = true;
+            
+            // Update info display
+            resultInfo.textContent = `Encrypted: ${formatFileSize(resultOutput._binaryData.length)} (ready to download)`;
+          } else {
+            // Handle text encryption
+            resultOutput.value = await encryptMessage(messageInput.value, keyInput.value);
+            resultInfo.textContent = "";
+          }
         } catch (e) {
           alert("Encryption failed: " + e.message);
+          console.error(e);
         }
       }
     }, "Encrypt");
@@ -1378,9 +1548,31 @@ const renderCodeChannel = (container, channel) => {
           return;
         }
         try {
-          resultOutput.value = await decryptMessage(messageInput.value, keyInput.value);
+          if (isFileMode && messageInput._binaryData) {
+            // Handle file decryption
+            const inputBytes = messageInput._binaryData;
+            
+            // Extract IV (first 16 bytes) and encrypted data
+            const iv = inputBytes.slice(0, 16);
+            const encryptedData = inputBytes.slice(16);
+            
+            const decryptedBytes = await decryptBytes(encryptedData, keyInput.value, iv);
+            
+            // Store binary data in result
+            resultOutput._binaryData = decryptedBytes;
+            resultOutput.value = "_DECRYPTED_BINARY_DATA_";
+            resultOutput.disabled = true;
+            
+            // Update info display
+            resultInfo.textContent = `Decrypted: ${formatFileSize(decryptedBytes.length)} (ready to download)`;
+          } else {
+            // Handle text decryption
+            resultOutput.value = await decryptMessage(messageInput.value, keyInput.value);
+            resultInfo.textContent = "";
+          }
         } catch (e) {
-          alert("Decryption failed. Make sure the input is valid. " + e.message);
+          alert("Decryption failed. Make sure the input is valid and the encryption key is correct. " + e.message);
+          console.error(e);
         }
       }
     }, "Decrypt");
@@ -1390,7 +1582,13 @@ const renderCodeChannel = (container, channel) => {
     actionRow.appendChild(decryptBtn);
     formDiv.appendChild(actionRow);
   
-    const keyWrapper = el("div", { style: { display: "flex", alignItems: "center" } });
+    const keyWrapper = el("div", { 
+      style: { 
+        display: "flex", 
+        alignItems: "center",
+        marginTop: "10px" 
+      } 
+    });
     const keyInput = el("input", {
       type: "text",
       placeholder: "Enter encryption key",
@@ -1407,6 +1605,13 @@ const renderCodeChannel = (container, channel) => {
     formDiv.appendChild(keyWrapper);
   
     container.appendChild(formDiv);
+  
+    // Helper function to format file size
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + " bytes";
+      else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + " KB";
+      else return (bytes / 1048576).toFixed(2) + " MB";
+    }
   
     // Helper functions for conversion and crypto operations
     function uint8ArrayToHex(uint8array) {
@@ -1453,6 +1658,7 @@ const renderCodeChannel = (container, channel) => {
       return keystream;
     }
   
+    // Text encryption/decryption functions
     async function encryptMessage(message, key) {
       const encoder = new TextEncoder();
       const messageBuffer = encoder.encode(message);
@@ -1482,6 +1688,35 @@ const renderCodeChannel = (container, channel) => {
       const decoder = new TextDecoder();
       return decoder.decode(decryptedBuffer);
     }
+    
+    // Binary data encryption/decryption functions
+    async function encryptBytes(bytes, key) {
+      const encoder = new TextEncoder();
+      const keyBuffer = encoder.encode(key);
+      const iv = new Uint8Array(16);
+      crypto.getRandomValues(iv);
+      const keystream = await getKeystream(keyBuffer, iv, bytes.length);
+      const encryptedBuffer = new Uint8Array(bytes.length);
+      
+      for (let i = 0; i < bytes.length; i++) {
+        encryptedBuffer[i] = bytes[i] ^ keystream[i];
+      }
+      
+      return [encryptedBuffer, iv];
+    }
+    
+    async function decryptBytes(encryptedBytes, key, iv) {
+      const encoder = new TextEncoder();
+      const keyBuffer = encoder.encode(key);
+      const keystream = await getKeystream(keyBuffer, iv, encryptedBytes.length);
+      const decryptedBuffer = new Uint8Array(encryptedBytes.length);
+      
+      for (let i = 0; i < encryptedBytes.length; i++) {
+        decryptedBuffer[i] = encryptedBytes[i] ^ keystream[i];
+      }
+      
+      return decryptedBuffer;
+    }
   
     const generateRandomPassword = (length) => {
       const chars =
@@ -1493,7 +1728,6 @@ const renderCodeChannel = (container, channel) => {
       return result;
     };
   };
-  
 
   document.addEventListener("DOMContentLoaded", () => {
     renderSidebar();

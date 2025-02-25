@@ -1,7 +1,7 @@
 :root {
     --color-primary: #1a1a2e;
     --color-secondary: #2e2e5f;
-    --color-accent: #3c3c81;
+    --color-accent: #4343b3;
     --color-background: #0d1117;
     --color-white: #ffffff;
     --color-text-light: #d1d5db;
@@ -60,7 +60,7 @@ html {
 
 .collapse-btn {
     position: absolute;
-    top: 25px;
+    top: 20px;
     right: 0px;
     background: var(--color-primary);
     border: none;
@@ -90,7 +90,7 @@ html {
 }
 
 h2 {
-    padding-left: 40px; /* Adjust the value as needed */
+    padding-left: 30px; /* Adjust the value as needed */
     position: relative;
 }
 
