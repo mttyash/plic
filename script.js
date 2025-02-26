@@ -112,7 +112,7 @@
       topbar.appendChild(categoryGroup);
     });
     
-    topbar.appendChild(el("div", { class: "version-text", style: { marginLeft: "auto", padding: "0 1rem" } }, "v1.21"));
+    topbar.appendChild(el("div", { class: "version-text", style: { marginLeft: "auto", padding: "0 1rem" } }, "v1.22"));
   };
 
   const selectChannel = channel => {
@@ -138,9 +138,15 @@
   
   const renderTextChannel = (container, channel) => {
     const chatContainer = el("div", { class: "chat-container", style: { height: "90%" } });
+    container.appendChild(chatContainer);
+
+    const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
+  
+    
     const messagesDiv = el("div", { class: "messages-area" });
     chatContainer.appendChild(messagesDiv);
-
+  
+    
     const updateMessages = () => {
       messagesDiv.innerHTML = "";
       const frag = document.createDocumentFragment();
@@ -156,19 +162,19 @@
             try {
               new URL(url);
               textContainer.appendChild(el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, part));
-            } catch { textContainer.appendChild(document.createTextNode(part)); }
+            } catch { 
+              textContainer.appendChild(document.createTextNode(part)); 
+            }
           } else {
             const textWithNewlines = part.split('\n').map((line, index, array) => {
               const lineElement = document.createTextNode(line);
-              if (index < array.length - 1) {
-                return [lineElement, el("br")];
-              }
-              return lineElement;
+              return index < array.length - 1 ? [lineElement, el("br")] : lineElement;
             }).flat();
             textWithNewlines.forEach(element => textContainer.appendChild(element));
           }
         });
         contentDiv.appendChild(textContainer);
+        
         if (msg.files?.length) {
           const filesDiv = el("div");
           msg.files.forEach(file => {
@@ -177,11 +183,13 @@
               const img = el("img", { src: file.content, style: { maxWidth: "200px", cursor: "pointer" } });
               img.addEventListener("click", () => showImageOverlay(file.content));
               fileWrapper.appendChild(img);
-            } else if (file.type.startsWith("audio/"))
+            } else if (file.type.startsWith("audio/")) {
               fileWrapper.appendChild(el("audio", { src: file.content, controls: true }));
-            else if (file.type.startsWith("text/") || !file.type)
+            } else if (file.type.startsWith("text/") || !file.type) {
               fileWrapper.appendChild(el("pre", { style: { maxHeight: "150px", overflow: "auto" } }, file.content));
-            else fileWrapper.textContent = file.name;
+            } else {
+              fileWrapper.textContent = file.name;
+            }
             fileWrapper.appendChild(el("button", {
               class: "download-btn",
               onclick: () => {
@@ -192,7 +200,8 @@
                   const blob = new Blob([file.content], { type: file.type || "text/plain" });
                   a.href = URL.createObjectURL(blob);
                 }
-                a.download = file.name; a.click();
+                a.download = file.name;
+                a.click();
               }
             }, "Download"));
             filesDiv.appendChild(fileWrapper);
@@ -211,7 +220,6 @@
           let tempFiles = msg.files.slice();
     
           const editFilesDiv = el("div");
-          
           const renderEditFiles = () => {
             editFilesDiv.innerHTML = "";
             tempFiles.forEach((file, fIdx) => {
@@ -244,7 +252,8 @@
     
           const newFileInput = el("input", { type: "file", multiple: true, style: { display: "none" } });
           const newAttachBtn = el("button", { type: "button", onclick: e => { 
-            e.preventDefault(); newFileInput.click(); 
+            e.preventDefault();
+            newFileInput.click(); 
           } }, "Attach File");
           editForm.appendChild(newAttachBtn);
           editForm.appendChild(newFileInput);
@@ -270,14 +279,16 @@
           });
         } }, "Edit"));        
         btnContainer.appendChild(el("button", { class: "remove-btn", onclick: () => { 
-          chatMessages[channel.id].splice(idx, 1); updateMessages(); 
+          chatMessages[channel.id].splice(idx, 1);
+          updateMessages(); 
         } }, "Remove"));
         msgContainer.appendChild(btnContainer);
         frag.appendChild(msgContainer);
       });
       messagesDiv.appendChild(frag);
     };
-
+  
+    
     const showImageOverlay = (src) => {
       const overlay = el("div", { class: "image-overlay" });
       const img = el("img", { src });
@@ -291,13 +302,47 @@
       document.body.appendChild(overlay);
       setTimeout(() => overlay.classList.add("show"), 0); 
     };
-
+  
+    
     chatMessages[channel.id] = chatMessages[channel.id] || [];
     updateMessages();
-
+  
+    
+    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
+    
+    
+    buttonContainer.appendChild(el("button", { type: "button", onclick: () => {
+      const data = chatMessages[channel.id] || [];
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      el("a", { href: URL.createObjectURL(blob), download: "chat.json" }).click();
+    }}, "Export"));
+    
+    
+    const importInput = el("input", { 
+      type: "file", 
+      accept: "application/json", 
+      style: { display: "none" },
+      onchange: async e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const fileObj = await readFile(file);
+        try {
+          const imported = JSON.parse(fileObj.content);
+          if (Array.isArray(imported)) { 
+            chatMessages[channel.id] = imported; 
+            updateMessages(); 
+          }
+        } catch {}
+      }
+    });
+    buttonContainer.appendChild(importInput);
+    buttonContainer.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import"));
+    chatContainer.insertBefore(buttonContainer, messagesDiv);
+  
+    
     const fileListDiv = el("div", { style: { display: "flex", overflowX: "auto" } });
     chatContainer.appendChild(fileListDiv);
-
+  
     const footerDiv = el("div", { class: "toolbar" });
     const textInput = el("textarea", {
       rows: "1",
@@ -316,14 +361,15 @@
     footerDiv.appendChild(fileInput);
     footerDiv.appendChild(el("button", { type: "submit" }, "Send"));
     chatContainer.appendChild(footerDiv);
-
+  
     let attachedFiles = [];
     const updateFileList = () => {
       fileListDiv.innerHTML = "";
       attachedFiles.forEach((file, i) => {
         const fileDiv = el("div", { class: "file-item" }, file.name);
         fileDiv.appendChild(el("button", { class: "remove-btn", onclick: () => {
-          attachedFiles.splice(i, 1); updateFileList();
+          attachedFiles.splice(i, 1);
+          updateFileList();
         } }, "Remove"));
         fileListDiv.appendChild(fileDiv);
       });
@@ -331,22 +377,29 @@
     fileInput.addEventListener("change", async () => {
       for (const file of fileInput.files)
         attachedFiles.push(await readFile(file));
-      updateFileList(); fileInput.value = "";
+      updateFileList();
+      fileInput.value = "";
     });
     const form = el("form", { onsubmit: e => {
       e.preventDefault();
       const text = textInput.value;
       if ((typeof text === "string" && text.trim() !== "") || attachedFiles.length) {
-        chatMessages[channel.id].push({ date: new Date().toLocaleString(), text, files: attachedFiles });
-        updateMessages(); textInput.value = ""; attachedFiles = []; updateFileList();
+        chatMessages[channel.id].push({ 
+          date: new Date().toLocaleString(), 
+          text, 
+          files: attachedFiles 
+        });
+        updateMessages();
+        textInput.value = "";
+        attachedFiles = [];
+        updateFileList();
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
     }});
     form.appendChild(fileListDiv);
     form.appendChild(footerDiv);
     chatContainer.appendChild(form);
-    container.appendChild(chatContainer);
-  };
+  };  
   
   const renderFlashcardChannel = (container, channel) => {
     container.innerHTML = "";
