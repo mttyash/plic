@@ -16,24 +16,25 @@
     });
     return e;
   };
-
   
   const categories = [
   { name: "General", channels: [{ id: "text1", name: "General Chat", type: "text" }] },
   { name: "Learning", channels: [
       { id: "flashcard1", name: "Flashcards", type: "flashcard" },
-      { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" },
-      { id: "code1", name: "Code Runner", type: "code" }
+      { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" }
     ]
   },
-  { name: "Reminders", channels: [{ id: "reminder1", name: "My Reminders", type: "reminder" }] },
-  { name: "Utilities", channels: [{ id: "crypt1", name: "Crypt", type: "crypt" }] }
+  { name: "Reminders", channels: [{ id: "reminder1", name: "Reminders", type: "reminder" }] },
+  { name: "Utilities", channels: [
+      { id: "code1", name: "Code Runner", type: "code" },
+      { id: "crypt1", name: "Crypt", type: "crypt" }
+    ]
+  }
 ];
 
   const chatMessages = {}, flashcards = {}, reminders = {};
   window.whiteboardData = window.whiteboardData || {};
   window.codeData = window.codeData || {};
-
   
   const readFile = (file) => new Promise((res) => {
     const reader = new FileReader();
@@ -43,46 +44,75 @@
       : reader.readAsText(file);
   });
 
-  
   const renderSidebar = () => {
-    const sidebar = document.querySelector(".sidebar");
-    sidebar.innerHTML = "";
-    sidebar.appendChild(el("button", { class: "collapse-btn", onclick: () => sidebar.classList.toggle("collapsed") }, "▶"));
-    const frag = document.createDocumentFragment();
+    const topbar = document.querySelector(".topbar");
+    topbar.innerHTML = "";
+    
     categories.forEach(cat => {
-      frag.appendChild(el("h2", {}, cat.name));
-      const ul = el("ul", { class: "channel-list" });
+      const categoryGroup = el("div", { style: { display: "flex", alignItems: "center", gap: "0.5rem" } });
+      
+      const channelContainer = el("div", { class: "channel-list" });
+      
       cat.channels.forEach(ch => {
-        const li = el("li", {
+        const channel = el("div", {
           class: "channel-item",
           "data-channel-id": ch.id,
           "data-channel-type": ch.type,
+          oncontextmenu: e => {
+            e.preventDefault();
+            if (ch.type === "function") {
+              // Store original text and enable removal mode
+              const originalText = channel.textContent;
+              channel.classList.add("remove-btn");
+              channel.title = "Click to remove";
+              
+              // Create single-use click handler
+              const removeHandler = e => {
+                e.stopPropagation();
+                const funcCat = categories.find(c => c.name === "Functions");
+                if (funcCat) {
+                  funcCat.channels = funcCat.channels.filter(x => x.id !== ch.id);
+                  renderSidebar();
+                }
+                channel.removeEventListener("click", removeHandler);
+              };
+      
+              // Create cancel handler
+              const cancelHandler = e => {
+                if (e.target !== channel) {
+                  channel.classList.remove("remove-btn");
+                  channel.title = "";
+                  channel.removeEventListener("click", removeHandler);
+                  document.removeEventListener("click", cancelHandler);
+                }
+              };
+      
+              channel.addEventListener("click", removeHandler);
+              document.addEventListener("click", cancelHandler);
+            }
+          },
           onclick: () => {
             if (ch.type === "function") {
-              const codeCh = categories.flatMap(c => c.channels).find(ch => ch.type === "code");
-              if (codeCh) { window.codeData[codeCh.id] = ch.code; selectChannel(codeCh); }
-            } else selectChannel(ch);
+              const codeCh = categories.flatMap(c => c.channels)
+                .find(ch => ch.type === "code");
+              if (codeCh) {
+                window.codeData[codeCh.id] = ch.code;
+                selectChannel(codeCh);
+              }
+            } else {
+              selectChannel(ch);
+            }
           }
         }, ch.name);
-        if (ch.type === "function") {
-          li.appendChild(el("button", { class: "remove-btn", onclick: e => {
-            e.stopPropagation();
-            const funcCat = categories.find(c => c.name === "Functions");
-            if (funcCat) { funcCat.channels = funcCat.channels.filter(x => x.id !== ch.id); renderSidebar(); }
-          } }, "Remove"));
-        }
-        ul.appendChild(li);
+      
+        channelContainer.appendChild(channel);
       });
-      frag.appendChild(ul);
+      
+      categoryGroup.appendChild(channelContainer);
+      topbar.appendChild(categoryGroup);
     });
-    frag.appendChild(el("div", { class: "version-text" }, "v1.19"));
-    sidebar.appendChild(frag);
-    if (!window.sidebarOutsideListenerAdded) {
-      const collapseSidebar = e => { if (sidebar && !sidebar.contains(e.target)) sidebar.classList.add("collapsed"); };
-      document.addEventListener("click", collapseSidebar);
-      document.addEventListener("touchstart", collapseSidebar);
-      window.sidebarOutsideListenerAdded = true;
-    }
+    
+    topbar.appendChild(el("div", { class: "version-text", style: { marginLeft: "auto", padding: "0 1rem" } }, "v1.20"));
   };
 
   const selectChannel = channel => {
@@ -91,8 +121,7 @@
         item.classList.toggle("active-channel", item.getAttribute("data-channel-id") === channel.id)
     );
     renderChannel(channel);
-};
-
+  };
   
   const renderChannel = channel => {
     const main = document.querySelector(".main-content");
@@ -108,7 +137,6 @@
   };
   
   const renderTextChannel = (container, channel) => {
-    container.appendChild(el("h2", {}, "Text Channel"));
     const chatContainer = el("div", { class: "chat-container", style: { height: "90%" } });
     const messagesDiv = el("div", { class: "messages-area" });
     chatContainer.appendChild(messagesDiv);
@@ -323,7 +351,6 @@
   const renderFlashcardChannel = (container, channel) => {
     container.innerHTML = "";
     const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
-    titleContainer.appendChild(el("h2", {}, "Flashcard Maker & Tester"));
   
     const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
     buttonContainer.appendChild(el("button", { type: "button", onclick: () => {
@@ -541,12 +568,11 @@ const renderWhiteboardChannel = (container, channel) => {
   container.innerHTML = "";
   Object.assign(container.style, {
     display: "flex",
-    flexDirection: "column",
+    flexDirection: "column"
   });
 
   // Create header and toolbar.
   const headerContainer = el("div", { style: { display: "flex", flexDirection: "column" } });
-  headerContainer.appendChild(el("h2", {}, "Whiteboard"));
 
   // Shared constants.
   const PATTERN_SIZE = 20,
@@ -1090,7 +1116,6 @@ const renderCodeChannel = (container, channel) => {
       alignItems: "center",
     }
   });
-  headerContainer.appendChild(el("h2", {}, "Code Runner"));
   
   const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
   const saveBtn = el("button", {}, "Save");
@@ -1232,7 +1257,6 @@ const renderCodeChannel = (container, channel) => {
   
   const renderReminderChannel = (container, channel) => {
     container.innerHTML = "";
-    container.appendChild(el("h2", {}, "Reminders"));
     const getContrastingTextColor = bg => {
       const parse = c => {
         c = c.trim().toLowerCase();
@@ -1257,10 +1281,37 @@ const renderCodeChannel = (container, channel) => {
     const renderReminders = () => {
       listDiv.innerHTML = "";
       reminders[channel.id].forEach((rem, idx) => {
-        const remDiv = el("div", { class: "reminder-container", style: { backgroundColor: rem.color, color: getContrastingTextColor(rem.color), borderRadius: "4px" } });
+        const remDiv = el("div", {
+          class: "reminder-container",
+          style: {
+            backgroundColor: rem.color,
+            color: getContrastingTextColor(rem.color),
+            borderRadius: "4px",
+            position: "relative",
+            padding: "8px 28px 8px 8px"
+          }
+        });
         if (rem.date) remDiv.appendChild(el("div", {}, new Date(rem.date).toLocaleString()));
         remDiv.appendChild(el("div", {}, rem.text));
-        remDiv.appendChild(el("button", { class: "remove-btn", onclick: () => { reminders[channel.id].splice(idx, 1); renderReminders(); } }, "Remove"));
+        remDiv.appendChild(el("button", {
+          class: "remove-btn",
+          style: {
+            position: "absolute",
+            top: "0",
+            right: "0",
+            padding: "2px 8px",
+            border: "none",
+            background: "transparent",
+            color: "inherit",
+            cursor: "pointer",
+            fontSize: "14px",
+            borderRadius: "0 4px 0 4px"
+          },
+          onclick: () => {
+            reminders[channel.id].splice(idx, 1);
+            renderReminders();
+          }
+        }, "×"));  // Using × instead of "Remove" for compactness
         listDiv.appendChild(remDiv);
       });
     };
@@ -1280,7 +1331,6 @@ const renderCodeChannel = (container, channel) => {
 
   const renderCryptChannel = (container, channel) => {
     container.innerHTML = "";
-    container.appendChild(el("h2", {}, "Crypt Channel"));
   
     const formDiv = el("div", {
       class: "crypt-container",
@@ -1300,7 +1350,7 @@ const renderCodeChannel = (container, channel) => {
     const messageWrapper = el("div", { style: { flex: "1", marginRight: "5px" } });
     const messageInput = el("textarea", {
       placeholder: "Enter your message here",
-      rows: "12",
+      rows: "10",
       class: "code-runner-textarea"
     });
     
@@ -1404,7 +1454,7 @@ const renderCodeChannel = (container, channel) => {
     const resultOutput = el("textarea", {
       placeholder: "The result will appear here",
       disabled: true,
-      rows: "12",
+      rows: "10",
       class: "code-runner-textarea"
     });
     
