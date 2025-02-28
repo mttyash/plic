@@ -1,2018 +1,2122 @@
-(() => {
-  const el = (tag, props = {}, ...children) => {
-    const e = document.createElement(tag);
-    for (let [k, v] of Object.entries(props)) {
-      if (k === 'class') e.className = v;
-      else if (k === 'style') Object.assign(e.style, v);
-      else if (k.startsWith('on') && typeof v === 'function')
-        e.addEventListener(k.slice(2).toLowerCase(), v);
-      else e[k] = v;
-    }
-    children.forEach(child => {
-      if (typeof child === 'string') e.appendChild(document.createTextNode(child));
-      else if (child) e.appendChild(child);
-    });
-    return e;
-  };
-
-  const categories = [
-    { name: "General", channels: [{ id: "text1", name: "General Chat", type: "text" }] },
-    {
-      name: "Learning", channels: [
-        { id: "flashcard1", name: "Flashcards", type: "flashcard" },
-        { id: "whiteboard1", name: "Whiteboard", type: "whiteboard" }
-      ]
+;(() => {
+  const el = (e, t = {}, ...n) => {
+      const a = document.createElement(e)
+      for (let [e, n] of Object.entries(t))
+        'class' === e
+          ? (a.className = n)
+          : 'style' === e
+          ? Object.assign(a.style, n)
+          : e.startsWith('on') && 'function' == typeof n
+          ? a.addEventListener(e.slice(2).toLowerCase(), n)
+          : (a[e] = n)
+      return (
+        n.forEach(e => {
+          'string' == typeof e
+            ? a.appendChild(document.createTextNode(e))
+            : e && a.appendChild(e)
+        }),
+        a
+      )
     },
-    { name: "Reminders", channels: [{ id: "reminder1", name: "Reminders", type: "reminder" }] },
-    {
-      name: "Utilities", channels: [
-        { id: "code1", name: "Code Runner", type: "code" },
-        { id: "crypt1", name: "Crypt", type: "crypt" }
-      ]
-    },
-    {
-      name: "Settings",
-      channels: [
-        { id: "settings", name: "Settings", type: "settings" }
-      ]
-    }
-  ];
-
-  const chatMessages = {}, flashcards = {}, reminders = {};
-  window.whiteboardData = window.whiteboardData || {};
-  window.codeData = window.codeData || {};
-
-  const readFile = (file) => new Promise((res) => {
-    const reader = new FileReader();
-    reader.onload = e => res({ name: file.name, type: file.type, content: e.target.result });
-    (file.type.startsWith("image/") || file.type.startsWith("audio/"))
-      ? reader.readAsDataURL(file)
-      : reader.readAsText(file);
-  });
-
-  const renderSidebar = () => {
-    const topbar = document.querySelector(".topbar");
-    topbar.innerHTML = "";
-
-    categories.forEach(cat => {
-      const categoryGroup = el("div", { style: { display: "flex", alignItems: "center", gap: "0.5rem" } });
-
-      const channelContainer = el("div", { class: "channel-list" });
-
-      cat.channels.forEach(ch => {
-        const channel = el("div", {
-          class: "channel-item",
-          "data-channel-id": ch.id,
-          "data-channel-type": ch.type,
-          oncontextmenu: e => {
-            e.preventDefault();
-            if (ch.type === "function") {
-
-              const originalText = channel.textContent;
-              channel.classList.add("remove-btn");
-              channel.title = "Click to remove";
-
-
-              const removeHandler = e => {
-                e.stopPropagation();
-                const funcCat = categories.find(c => c.name === "Functions");
-                if (funcCat) {
-                  funcCat.channels = funcCat.channels.filter(x => x.id !== ch.id);
-                  renderSidebar();
-                }
-                channel.removeEventListener("click", removeHandler);
-              };
-
-
-              const cancelHandler = e => {
-                if (e.target !== channel) {
-                  channel.classList.remove("remove-btn");
-                  channel.title = "";
-                  channel.removeEventListener("click", removeHandler);
-                  document.removeEventListener("click", cancelHandler);
-                }
-              };
-
-              channel.addEventListener("click", removeHandler);
-              document.addEventListener("click", cancelHandler);
-            }
-          },
-          onclick: () => {
-            if (ch.type === "function") {
-              const codeCh = categories.flatMap(c => c.channels)
-                .find(ch => ch.type === "code");
-              if (codeCh) {
-                window.codeData[codeCh.id] = ch.code;
-                selectChannel(codeCh);
-              }
-            } else {
-              selectChannel(ch);
-            }
-          }
-        }, ch.name);
-
-        channelContainer.appendChild(channel);
-      });
-
-      categoryGroup.appendChild(channelContainer);
-      topbar.appendChild(categoryGroup);
-    });
-
-    topbar.appendChild(el("div", { class: "version-text", style: { marginLeft: "auto", padding: "0 1rem" } }, "v1.23"));
-  };
-
-  let activeChannelId = null;
-  const selectChannel = channel => {
-    activeChannelId = channel.id;
-    document.querySelectorAll(".channel-item").forEach(item =>
-      item.classList.toggle("active-channel", item.getAttribute("data-channel-id") === channel.id)
-    );
-    renderChannel(channel);
-  };
-
-  const renderChannel = channel => {
-    const main = document.querySelector(".main-content");
-    main.innerHTML = "";
-    ({
-      text: () => renderTextChannel(main, channel),
-      flashcard: () => renderFlashcardChannel(main, channel),
-      whiteboard: () => renderWhiteboardChannel(main, channel),
-      code: () => renderCodeChannel(main, channel),
-      reminder: () => renderReminderChannel(main, channel),
-      crypt: () => renderCryptChannel(main, channel),
-      settings: () => renderSettingsChannel(main, channel)
-    }[channel.type] || (() => { }))();
-  };
-
-
-  const renderTextChannel = (container, channel) => {
-    const chatContainer = el("div", { class: "chat-container", style: { height: "90%" } });
-    container.appendChild(chatContainer);
-
-    const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
-
-
-    const messagesDiv = el("div", { class: "messages-area" });
-    chatContainer.appendChild(messagesDiv);
-
-
-    const updateMessages = () => {
-      messagesDiv.innerHTML = "";
-      const frag = document.createDocumentFragment();
-      (chatMessages[channel.id] || []).forEach((msg, idx) => {
-        const msgContainer = el("div", { class: "message-container" });
-        msgContainer.appendChild(el("div", { class: "message-date" }, msg.date));
-        const contentDiv = el("div", { class: "message-content" });
-        const textContainer = el("span");
-        msg.text.split(/(https?:\/\/\S+|www\.\S+)/gi).forEach((part, i) => {
-          if (!part) return;
-          if (i % 2) {
-            let url = /^www\./i.test(part) ? "http://" + part : part;
-            try {
-              new URL(url);
-              textContainer.appendChild(el("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, part));
-            } catch {
-              textContainer.appendChild(document.createTextNode(part));
-            }
-          } else {
-            const textWithNewlines = part.split('\n').map((line, index, array) => {
-              const lineElement = document.createTextNode(line);
-              return index < array.length - 1 ? [lineElement, el("br")] : lineElement;
-            }).flat();
-            textWithNewlines.forEach(element => textContainer.appendChild(element));
-          }
-        });
-        contentDiv.appendChild(textContainer);
-
-        if (msg.files?.length) {
-          const filesDiv = el("div");
-          msg.files.forEach(file => {
-            const fileWrapper = el("div", { style: { position: "relative" } });
-            if (file.type.startsWith("image/")) {
-              const img = el("img", { src: file.content, style: { maxWidth: "200px", cursor: "pointer" } });
-              img.addEventListener("click", () => showImageOverlay(file.content));
-              fileWrapper.appendChild(img);
-            } else if (file.type.startsWith("audio/")) {
-              fileWrapper.appendChild(el("audio", { src: file.content, controls: true }));
-            } else if (file.type.startsWith("text/") || !file.type) {
-              fileWrapper.appendChild(el("pre", { style: { maxHeight: "150px", overflow: "auto" } }, file.content));
-            } else {
-              fileWrapper.textContent = file.name;
-            }
-            fileWrapper.appendChild(el("button", {
-              class: "download-btn",
-              onclick: () => {
-                const a = el("a");
-                if (file.type.startsWith("image/") || file.type.startsWith("audio/"))
-                  a.href = file.content;
-                else {
-                  const blob = new Blob([file.content], { type: file.type || "text/plain" });
-                  a.href = URL.createObjectURL(blob);
-                }
-                a.download = file.name;
-                a.click();
-              }
-            }, "Download"));
-            filesDiv.appendChild(fileWrapper);
-          });
-          contentDiv.appendChild(filesDiv);
-        }
-        msgContainer.appendChild(contentDiv);
-
-        const btnContainer = el("div", { class: "message-toolbar" });
-        btnContainer.appendChild(el("button", {
-          class: "edit-btn", onclick: () => {
-            const editForm = el("form");
-            const rows = msg.text.split('\n').length;
-            const editInput = el("textarea", { class: "message-edited", rows: rows, value: msg.text });
-            editForm.appendChild(editInput);
-
-            let tempFiles = msg.files.slice();
-
-            const editFilesDiv = el("div");
-            const renderEditFiles = () => {
-              editFilesDiv.innerHTML = "";
-              tempFiles.forEach((file, fIdx) => {
-                const fileRow = el("div", { style: { position: "relative" } });
-                if (file.type.startsWith("image/")) {
-                  const img = el("img", { src: file.content, style: { maxWidth: "200px", cursor: "pointer" } });
-                  img.addEventListener("click", () => showImageOverlay(file.content));
-                  fileRow.appendChild(img);
-                } else if (file.type.startsWith("audio/")) {
-                  fileRow.appendChild(el("audio", { src: file.content, controls: true }));
-                } else if (file.type.startsWith("text/") || !file.type) {
-                  fileRow.appendChild(el("pre", { style: { maxHeight: "150px", overflow: "auto" } }, file.content));
-                } else {
-                  fileRow.textContent = file.name;
-                }
-                fileRow.appendChild(el("button", {
-                  type: "button",
-                  class: "remove-btn",
-                  style: { position: "absolute", top: "0px", right: "0px" },
-                  onclick: () => {
-                    tempFiles.splice(fIdx, 1);
-                    renderEditFiles();
-                  }
-                }, "Remove"));
-                editFilesDiv.appendChild(fileRow);
-              });
-            };
-            renderEditFiles();
-            editForm.appendChild(editFilesDiv);
-
-            const newFileInput = el("input", { type: "file", multiple: true, style: { display: "none" } });
-            const newAttachBtn = el("button", {
-              type: "button", onclick: e => {
-                e.preventDefault();
-                newFileInput.click();
-              }
-            }, "Attach File");
-            editForm.appendChild(newAttachBtn);
-            editForm.appendChild(newFileInput);
-            newFileInput.addEventListener("change", async () => {
-              for (const file of newFileInput.files)
-                tempFiles.push(await readFile(file));
-              renderEditFiles();
-              newFileInput.value = "";
-            });
-            const saveBtn = el("button", { type: "submit" }, "Save");
-            const cancelBtn = el("button", { type: "button", onclick: updateMessages }, "Cancel");
-            editForm.append(saveBtn, cancelBtn);
-
-            const contentDiv = msgContainer.querySelector(".message-content");
-            contentDiv.innerHTML = "";
-            contentDiv.appendChild(editForm);
-
-            editForm.addEventListener("submit", e => {
-              e.preventDefault();
-              msg.text = editInput.value;
-              msg.files = tempFiles;
-              updateMessages();
-            });
-          }
-        }, "Edit"));
-        btnContainer.appendChild(el("button", {
-          class: "remove-btn", onclick: () => {
-            chatMessages[channel.id].splice(idx, 1);
-            updateMessages();
-          }
-        }, "Remove"));
-        msgContainer.appendChild(btnContainer);
-        frag.appendChild(msgContainer);
-      });
-      messagesDiv.appendChild(frag);
-    };
-
-
-    const showImageOverlay = (src) => {
-      const overlay = el("div", { class: "image-overlay" });
-      const img = el("img", { src });
-      overlay.appendChild(img);
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) {
-          overlay.classList.remove("show");
-          setTimeout(() => overlay.remove(), 100);
-        }
-      });
-      document.body.appendChild(overlay);
-      setTimeout(() => overlay.classList.add("show"), 0);
-    };
-
-
-    chatMessages[channel.id] = chatMessages[channel.id] || [];
-    updateMessages();
-
-
-    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
-
-
-    buttonContainer.appendChild(el("button", {
-      type: "button", onclick: () => {
-        const data = chatMessages[channel.id] || [];
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-        el("a", { href: URL.createObjectURL(blob), download: "chat.json" }).click();
-      }
-    }, "Export"));
-
-    const importInput = el("input", {
-      type: "file",
-      accept: "application/json",
-      style: { display: "none" },
-      onchange: async e => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const fileObj = await readFile(file);
-        try {
-          const imported = JSON.parse(fileObj.content);
-          if (Array.isArray(imported)) {
-
-            chatMessages[channel.id] = chatMessages[channel.id] || [];
-            imported.forEach(newMsg => {
-
-              if (!newMsg.id) {
-                newMsg.id = Date.now() + Math.random();
-              }
-
-              const index = chatMessages[channel.id].findIndex(oldMsg => oldMsg.id === newMsg.id);
-              if (index !== -1) {
-
-                chatMessages[channel.id][index] = newMsg;
-              } else {
-
-                chatMessages[channel.id].push(newMsg);
-              }
-            });
-            updateMessages();
-          }
-        } catch (error) {
-          console.error("Error importing messages:", error);
-        }
-      }
-    });
-
-    importInput.addEventListener("click", () => {
-      importInput.value = "";
-    });
-    buttonContainer.appendChild(importInput);
-    buttonContainer.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import"));
-    chatContainer.insertBefore(buttonContainer, messagesDiv);
-
-
-    const fileListDiv = el("div", { style: { display: "flex", overflowX: "auto" } });
-    chatContainer.appendChild(fileListDiv);
-
-    const footerDiv = el("div", { class: "toolbar" });
-    const textInput = el("textarea", {
-      rows: "1",
-      placeholder: "Type a message...",
-      style: { flex: "1", minWidth: "100px", maxWidth: "calc(100% - 120px)" },
-      onkeydown: e => {
-        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-          e.preventDefault();
-          form.dispatchEvent(new Event("submit", { cancelable: true }));
-        }
-      }
-    });
-    footerDiv.appendChild(textInput);
-    const fileInput = el("input", { type: "file", multiple: true, style: { display: "none" } });
-    footerDiv.appendChild(el("button", { type: "button", onclick: () => fileInput.click() }, "Attach File"));
-    footerDiv.appendChild(fileInput);
-    footerDiv.appendChild(el("button", { type: "submit" }, "Send"));
-    chatContainer.appendChild(footerDiv);
-
-    let attachedFiles = [];
-    const updateFileList = () => {
-      fileListDiv.innerHTML = "";
-      attachedFiles.forEach((file, i) => {
-        const fileDiv = el("div", { class: "file-item" }, file.name);
-        fileDiv.appendChild(el("button", {
-          class: "remove-btn", onclick: () => {
-            attachedFiles.splice(i, 1);
-            updateFileList();
-          }
-        }, "Remove"));
-        fileListDiv.appendChild(fileDiv);
-      });
-    };
-    fileInput.addEventListener("change", async () => {
-      for (const file of fileInput.files)
-        attachedFiles.push(await readFile(file));
-      updateFileList();
-      fileInput.value = "";
-    });
-    const form = el("form", {
-      onsubmit: e => {
-        e.preventDefault();
-        const text = textInput.value;
-        if ((typeof text === "string" && text.trim() !== "") || attachedFiles.length) {
-          chatMessages[channel.id].push({
-            id: Date.now() + "_" + Math.random().toString(36).substring(2, 9),
-            date: new Date().toLocaleString(),
-            text,
-            files: attachedFiles
-          });
-          updateMessages();
-          textInput.value = "";
-          attachedFiles = [];
-          updateFileList();
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-      }
-    });
-    form.appendChild(fileListDiv);
-    form.appendChild(footerDiv);
-    chatContainer.appendChild(form);
-  };
-
-  const renderFlashcardChannel = (container, channel) => {
-    container.innerHTML = "";
-    const titleContainer = el("div", { class: "flashcard-toolbar", style: { display: "flex", justifyContent: "space-between", alignItems: "center" } });
-
-    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
-    buttonContainer.appendChild(el("button", {
-      type: "button", onclick: () => {
-        const data = flashcards[channel.id] || [];
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-        el("a", { href: URL.createObjectURL(blob), download: "flashcards.json" }).click();
-      }
-    }, "Export"));
-    const importInput = el("input", {
-      type: "file", accept: "application/json", style: { display: "none" },
-      onchange: async e => {
-        const file = e.target.files[0]; if (!file) return;
-        const fileObj = await readFile(file);
-        try {
-          const imported = JSON.parse(fileObj.content);
-          if (Array.isArray(imported)) { flashcards[channel.id] = imported; renderFlashcardsList(); }
-        } catch { }
-      }
-    });
-    importInput.addEventListener("click", () => {
-      importInput.value = "";
-    });
-    buttonContainer.appendChild(importInput);
-    buttonContainer.appendChild(el("button", { type: "button", onclick: () => importInput.click() }, "Import"));
-    titleContainer.appendChild(buttonContainer);
-    container.appendChild(titleContainer);
-
-    const modeContainer = el("div"), creationDiv = el("div");
-    const form = el("form", {
-      class: "flashcard-form", onsubmit: e => {
-        e.preventDefault();
-        const q = questionInput.value.trim();
-        if (!q) return;
-        const answers = Array.from(answersContainer.querySelectorAll(".answer-row")).map(row => {
-          const [chk, inp] = row.querySelectorAll("input");
-          return inp.value.trim() ? { text: inp.value, correct: chk.checked } : null;
-        }).filter(x => x);
-
-        if (answers.length) {
-          flashcards[channel.id] = flashcards[channel.id] || [];
-          flashcards[channel.id].push({ question: q, answers });
-          questionInput.value = ""; answersContainer.innerHTML = ""; addAnswerRow(); renderFlashcardsList();
-        }
-      }
-    });
-
-    const questionInput = el("input", { type: "text", placeholder: "Enter question here", required: true, style: { flex: "1" } });
-    form.appendChild(questionInput);
-    const answersContainer = el("div", { id: "answers-container" });
-    form.appendChild(answersContainer);
-    const addAnswerRow = (txt = "", corr = false) => {
-      const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
-      row.appendChild(el("input", { type: "checkbox", title: "Mark as correct answer", checked: corr }));
-      row.appendChild(el("input", { type: "text", placeholder: "Answer", required: true, value: txt, style: { flex: "1" } }));
-      row.appendChild(el("button", { type: "button", class: "remove-btn", onclick: () => row.remove() }, "Remove"));
-      answersContainer.appendChild(row);
-    };
-    addAnswerRow();
-    form.appendChild(el("button", { type: "button", onclick: () => addAnswerRow() }, "Add Answer"));
-    form.appendChild(el("button", { type: "submit" }, "Add Flashcard"));
-    const startTestBtn = el("button", { type: "button" }, "Start Test");
-    form.appendChild(startTestBtn);
-    creationDiv.appendChild(form);
-
-    const flashcardListDiv = el("div");
-    creationDiv.appendChild(flashcardListDiv);
-    const testDiv = el("div", { style: { display: "none" } });
-    modeContainer.append(creationDiv, testDiv);
-
-    container.appendChild(modeContainer);
-
-    const renderFlashcardsList = () => {
-      flashcardListDiv.innerHTML = "";
-      (flashcards[channel.id] = flashcards[channel.id] || []).forEach((card, idx) => {
-        const cardDiv = el("div", { class: "flashcard" });
-        const questionP = el("p", {}, "Q: " + card.question);
-        cardDiv.appendChild(questionP);
-        const ul = el("div");
-        card.answers.forEach(ans => {
-          const li = el("div", { style: { display: "flex", alignItems: "center" } });
-          const checkbox = el("input", { type: "checkbox", checked: ans.correct, disabled: true });
-          li.appendChild(checkbox);
-          li.appendChild(document.createTextNode(ans.text));
-          ul.appendChild(li);
-        });
-        cardDiv.appendChild(ul);
-
-        const toolbar = el("div", { class: "toolbar" });
-
-        const editBtn = el("button", {
-          type: "button", onclick: function () {
-            if (this.textContent === "Edit") {
-
-              const qInput = el("input", { type: "text", value: card.question, style: { width: "100%" } });
-              cardDiv.replaceChild(qInput, questionP);
-
-
-              const answersDiv = el("div");
-              card.answers.forEach(ans => {
-                const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
-                row.appendChild(el("input", { type: "checkbox", checked: ans.correct }));
-                row.appendChild(el("input", { type: "text", value: ans.text, style: { flex: "1" } }));
-                answersDiv.appendChild(row);
-              });
-
-              cardDiv.replaceChild(answersDiv, ul);
-
-
-              const addAnswerBtn = el("button", {
-                type: "button", onclick: () => {
-                  const row = el("div", { class: "answer-row", style: { display: "flex", alignItems: "center" } });
-                  row.appendChild(el("input", { type: "checkbox" }));
-                  row.appendChild(el("input", { type: "text", placeholder: "New answer", style: { flex: "1" } }));
-                  answersDiv.appendChild(row);
-                }
-              }, "Add Answer");
-              toolbar.insertBefore(addAnswerBtn, this.nextSibling);
-              this.textContent = "Save";
-            } else {
-
-              const qInput = cardDiv.querySelector("input[type='text']");
-              card.question = qInput.value;
-              const newAns = [];
-              cardDiv.querySelectorAll(".answer-row").forEach(row => {
-                const [chk, inp] = row.querySelectorAll("input");
-                if (inp.value.trim()) newAns.push({ text: inp.value, correct: chk.checked });
-              });
-              card.answers = newAns;
-
-              const addAnswerBtn = toolbar.querySelector("button:nth-child(3)");
-              if (addAnswerBtn && addAnswerBtn.textContent === "Add Answer") {
-                toolbar.removeChild(addAnswerBtn);
-              }
-              renderFlashcardsList();
-            }
-          }
-        }, "Edit");
-
-        toolbar.appendChild(editBtn);
-        toolbar.appendChild(el("button", {
-          type: "button", class: "remove-btn", onclick: () => {
-            flashcards[channel.id].splice(idx, 1);
-            renderFlashcardsList();
-          }
-        }, "Remove"));
-
-        cardDiv.appendChild(toolbar);
-        flashcardListDiv.appendChild(cardDiv);
-      });
-      startTestBtn.disabled = !(flashcards[channel.id]?.length);
-    };
-
-    renderFlashcardsList();
-
-    startTestBtn.addEventListener("click", () => {
-      creationDiv.style.display = "none";
-      renderTestMode(testDiv, channel);
-      testDiv.style.display = "block";
-    });
-    const renderTestMode = (testContainer, channel) => {
-      testContainer.innerHTML = "";
-      const cards = [...(flashcards[channel.id] || [])].sort(() => Math.random() - 0.5);
-      if (!cards.length) {
-        testContainer.textContent = "No flashcards available for testing.";
-        return;
-      }
-
-      const testData = cards.map(card => {
-        const shuffledAnswers = card.answers.slice();
-        for (let i = shuffledAnswers.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [shuffledAnswers[i], shuffledAnswers[j]] = [shuffledAnswers[j], shuffledAnswers[i]];
-        }
-        return { question: card.question, answers: shuffledAnswers };
-      });
-
-      const formTest = el("form", {
-        onsubmit: e => {
-          e.preventDefault();
-          let score = 0;
-          testData.forEach((testCard, idx) => {
-            const selected = Array.from(formTest.querySelectorAll(`input[name="card${idx}"]:checked`))
-              .map(inp => +inp.value);
-            const correct = testCard.answers
-              .map((ans, i) => ans.correct ? i : null)
-              .filter(x => x !== null);
-            if (selected.sort().toString() === correct.sort().toString()) score++;
-            formTest.querySelectorAll(`input[name="card${idx}"]`).forEach(inp => {
-              const val = +inp.value;
-              if (correct.includes(val)) inp.parentElement.classList.add("correct-highlight");
-              else if (inp.checked) inp.parentElement.classList.add("incorrect-highlight");
-              inp.disabled = true;
-            });
-          });
-          formTest.querySelector("button[type='submit']").disabled = true;
-          formTest.appendChild(
-            el("div", {}, `Your score: ${score} / ${testData.length}`)
-          );
-        }
-      });
-
-      testData.forEach((testCard, idx) => {
-        const qDiv = el("div");
-        qDiv.appendChild(el("p", {}, "Q: " + testCard.question));
-        testCard.answers.forEach((ans, aIdx) => {
-          const label = el("label", {
-            style: { display: "flex", alignItems: "center" }
-          });
-          label.appendChild(el("input", { type: "checkbox", name: `card${idx}`, value: aIdx }));
-          label.append(ans.text);
-          qDiv.appendChild(label);
-        });
-        formTest.appendChild(qDiv);
-      });
-
-      formTest.appendChild(el("button", { type: "submit" }, "Submit Answers"));
-      formTest.appendChild(el("button", {
-        type: "button", onclick: () => {
-          testContainer.style.display = "none";
-          creationDiv.style.display = "block";
-        }
-      }, "Back"));
-
-      testContainer.appendChild(formTest);
-    };
-
-  };
-
-  const renderWhiteboardChannel = (container, channel) => {
-
-    container.innerHTML = "";
-    Object.assign(container.style, {
-      display: "flex",
-      flexDirection: "column"
-    });
-
-
-    const headerContainer = el("div", { style: { display: "flex", flexDirection: "column" } });
-
-
-    const PATTERN_SIZE = 20,
-      DOT_RADIUS = 1,
-      DOT_COLOR = "#3c3c81",
-      BG_COLOR = "#1a1a2e";
-
-
-
-
-    const snapCoordinates = (x, y) => {
-      let startXGrid = (offsetX * scale) % PATTERN_SIZE;
-      let startYGrid = (offsetY * scale) % PATTERN_SIZE;
-      if (startXGrid < 0) startXGrid += PATTERN_SIZE;
-      if (startYGrid < 0) startYGrid += PATTERN_SIZE;
-      return {
-        x: startXGrid + Math.round((x - startXGrid) / PATTERN_SIZE) * PATTERN_SIZE,
-        y: startYGrid + Math.round((y - startYGrid) / PATTERN_SIZE) * PATTERN_SIZE,
-      };
-    };
-
-
-
-    const isNearLine = (x0, y0, x1, y1, px, py, tolerance, lineWidth) => {
-      const A = px - x0;
-      const B = py - y0;
-      const C = x1 - x0;
-      const D = y1 - y0;
-      const dot = A * C + B * D;
-      const len_sq = C * C + D * D;
-      let param = (len_sq !== 0) ? dot / len_sq : -1;
-      let xx, yy;
-      if (param < 0) {
-        xx = x0;
-        yy = y0;
-      } else if (param > 1) {
-        xx = x1;
-        yy = y1;
-      } else {
-        xx = x0 + param * C;
-        yy = y0 + param * D;
-      }
-      const dx = px - xx;
-      const dy = py - yy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      return dist <= tolerance + lineWidth / 2;
-    };
-
-
-    const createZoomButton = (isZoomIn) => {
-      return el("button", {
-        onclick: () => {
-          const factor = 2,
-            cx = canvas.width / 2,
-            cy = canvas.height / 2;
-          const newScale = isZoomIn ? scale * factor : scale / (factor * factor);
-
-          offsetX += cx * (1 / newScale - 1 / scale);
-          offsetY += cy * (1 / newScale - 1 / scale);
-          scale = newScale;
-          redrawCanvas();
-          whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-        }
-      }, isZoomIn ? "Zoom In" : "Zoom Out");
-    };
-
-
-
-    const toolbar = el("div", { class: "toolbar", style: { display: "flex" } });
-
-    const colorPicker = el("input", {
-      type: "color",
-      value: "#ffffff",
-      onchange: e => {
-        brushColor = e.target.value;
-
-        eraserMode = false;
-        eraserButton.style.backgroundColor = "";
-        panMode = false;
-        panModeButton.style.backgroundColor = "";
-        selectMode = false;
-        selectButton.style.backgroundColor = "";
-      }
-    });
-
-    const sizeSlider = el("input", {
-      type: "range",
-      min: "1",
-      max: "20",
-      value: "1",
-      onchange: e => {
-        brushSize = +e.target.value;
-        drawCursorCircle();
-      }
-    });
-
-    const eraserButton = el("button", {
-      onclick: () => {
-        eraserMode = !eraserMode;
-
-        panMode = false;
-        panModeButton.style.backgroundColor = "";
-        selectMode = false;
-        selectButton.style.backgroundColor = "";
-
-        eraserButton.style.backgroundColor = eraserMode ? "#ff0000" : "";
-      }
-    }, "Eraser");
-
-    const panModeButton = el("button", {
-      onclick: () => {
-        panMode = !panMode;
-
-        eraserMode = false;
-        eraserButton.style.backgroundColor = "";
-        selectMode = false;
-        selectButton.style.backgroundColor = "";
-
-        panModeButton.style.backgroundColor = panMode ? "var(--color-accent)" : "";
-        redrawCanvas();
-      }
-    }, "Pan");
-
-    const zoomInButton = createZoomButton(true);
-    const zoomOutButton = createZoomButton(false);
-
-    const snapButton = el("button", {
-      onclick: () => {
-        snapMode = !snapMode;
-        snapButton.style.backgroundColor = snapMode ? "var(--color-accent)" : "";
-      }
-    }, "Snap");
-
-    const selectButton = el("button", {
-      onclick: () => {
-        selectMode = !selectMode;
-
-        eraserMode = false;
-        eraserButton.style.backgroundColor = "";
-        panMode = false;
-        panModeButton.style.backgroundColor = "";
-
-        selectButton.style.backgroundColor = selectMode ? "var(--color-accent)" : "";
-        if (selectMode) {
-          canvas.style.cursor = "crosshair";
-          copySelectButton.disabled = false;
-          cutSelectButton.disabled = false;
-        } else {
-          canvas.style.cursor = "none";
-          copySelectButton.disabled = true;
-          cutSelectButton.disabled = true;
-          brushSelectData = null;
-          selectArea = null;
-          redrawCanvas();
-        }
-      }
-    }, "Select");
-
-
-    const processSelection = (shouldCut = false) => {
-      if (!selectArea) return;
-      const selLeft = Math.min(selectArea.x0, selectArea.x1),
-        selRight = Math.max(selectArea.x0, selectArea.x1),
-        selTop = Math.min(selectArea.y0, selectArea.y1),
-        selBottom = Math.max(selectArea.y0, selectArea.y1);
-      selectDataWidth = selRight - selLeft;
-      selectDataHeight = selBottom - selTop;
-
-
-      const selectVectorData = [];
-      const drawingsToRemove = [];
-
-      for (let i = 0; i < drawings.length; i++) {
-        const item = drawings[i];
-        if (item.type === "line" && isLineInsideRect(item, selLeft, selTop, selRight, selBottom)) {
-          selectVectorData.push(item);
-          if (shouldCut) {
-            drawingsToRemove.push(i);
-          }
-        }
-      }
-
-
-      brushSelectData = selectVectorData.map(item => ({
-        type: "line",
-        x0: item.x0 - selLeft,
-        y0: item.y0 - selTop,
-        x1: item.x1 - selLeft,
-        y1: item.y1 - selTop,
-        color: item.color,
-        size: item.size
-      }));
-
-
-      if (shouldCut && drawingsToRemove.length > 0) {
-
-        for (let i = drawingsToRemove.length - 1; i >= 0; i--) {
-          drawings.splice(drawingsToRemove[i], 1);
-        }
-        window.whiteboardData[channel] = drawings;
-      }
-
-      selectArea = null;
-      copySelectButton.disabled = true;
-      cutSelectButton.disabled = true;
-      redrawCanvas();
-    };
-
-    const copySelectButton = el("button", {
-      onclick: () => processSelection(false),
-      disabled: true
-    }, "Copy");
-
-    const cutSelectButton = el("button", {
-      onclick: () => processSelection(true),
-      disabled: true
-    }, "Cut");
-
-    toolbar.append(colorPicker, sizeSlider, eraserButton, panModeButton, zoomInButton, zoomOutButton, snapButton, selectButton, copySelectButton, cutSelectButton);
-    headerContainer.appendChild(toolbar);
-    container.appendChild(headerContainer);
-
-
-
-    const canvasWrapper = el("div", { style: { flex: "1", position: "relative", overflow: "hidden" } });
-    container.appendChild(canvasWrapper);
-
-    const canvas = el("canvas");
-    canvas.style.cursor = "none";
-    canvasWrapper.appendChild(canvas);
-    const context = canvas.getContext("2d");
-    canvas.classList.add("whiteboard-context");
-    document.oncontextmenu = () => false;
-
-
-
-    window.whiteboardData[channel] = window.whiteboardData[channel] || [];
-    const drawings = window.whiteboardData[channel];
-    window.whiteboardPanZoomData = window.whiteboardPanZoomData || {};
-    whiteboardPanZoomData = window.whiteboardPanZoomData;
-    whiteboardPanZoomData[channel] = whiteboardPanZoomData[channel] || { offsetX: 0, offsetY: 0, scale: 1 };
-    let { offsetX, offsetY, scale } = whiteboardPanZoomData[channel],
-      cursorX = 0, cursorY = 0, prevCursorX = 0, prevCursorY = 0,
-      brushColor = "#fff", brushSize = 1, eraserMode = false, panMode = false,
-      snapMode = false, selectMode = false, selectArea = null;
-
-
-    let brushSelectData = null;
-    let selectDataWidth = 0, selectDataHeight = 0;
-
-
-    const toScreenX = x => (x + offsetX) * scale;
-    const toScreenY = y => (y + offsetY) * scale;
-    const toTrueX = x => (x / scale) - offsetX;
-    const toTrueY = y => (y / scale) - offsetY;
-
-
-
-    const redrawCanvas = () => {
-      canvas.width = canvasWrapper.clientWidth;
-      canvas.height = canvasWrapper.clientHeight;
-      context.clearRect(0, 0, canvas.width, canvas.height);
-
-
-      context.fillStyle = BG_COLOR;
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      let startX = (offsetX * scale) % PATTERN_SIZE;
-      let startY = (offsetY * scale) % PATTERN_SIZE;
-      if (startX < 0) startX += PATTERN_SIZE;
-      if (startY < 0) startY += PATTERN_SIZE;
-      context.fillStyle = DOT_COLOR;
-      for (let x = startX; x < canvas.width; x += PATTERN_SIZE) {
-        for (let y = startY; y < canvas.height; y += PATTERN_SIZE) {
-          context.beginPath();
-          context.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
-          context.fill();
-        }
-      }
-
-
-      drawings.forEach(item => {
-        if (item.type === "line") {
-          drawLine(
-            toScreenX(item.x0), toScreenY(item.y0),
-            toScreenX(item.x1), toScreenY(item.y1),
-            item.color, item.size
-          );
-        }
-      });
-
-      drawAxes();
-      if (selectArea) drawSelectArea();
-    };
-
-    const drawLine = (x0, y0, x1, y1, color, size) => {
-      context.beginPath();
-      context.moveTo(x0, y0);
-      context.lineTo(x1, y1);
-      context.strokeStyle = color;
-      context.lineWidth = size;
-      context.lineCap = "round";
-      context.stroke();
-    };
-
-    const drawAxes = () => {
-      if (!panMode) return;
-      const cx = canvas.width / 2, cy = canvas.height / 2;
-      context.save();
-      context.strokeStyle = DOT_COLOR;
-      context.lineWidth = 1;
-
-      context.beginPath();
-      context.moveTo(0, cy);
-      context.lineTo(canvas.width, cy);
-      context.stroke();
-
-      context.beginPath();
-      context.moveTo(cx, 0);
-      context.lineTo(cx, canvas.height);
-      context.stroke();
-      context.restore();
-    };
-
-
-    const drawSelectArea = () => {
-      if (!selectArea) return;
-      const selLeft = Math.min(selectArea.x0, selectArea.x1),
-        selRight = Math.max(selectArea.x0, selectArea.x1),
-        selTop = Math.min(selectArea.y0, selectArea.y1),
-        selBottom = Math.max(selectArea.y0, selectArea.y1);
-      const screenX = toScreenX(selLeft),
-        screenY = toScreenY(selTop),
-        screenWidth = toScreenX(selRight) - toScreenX(selLeft),
-        screenHeight = toScreenY(selBottom) - toScreenY(selTop);
-      context.save();
-      context.strokeStyle = "#3c3c81";
-      context.lineWidth = 2;
-      context.setLineDash([5, 5]);
-      context.strokeRect(screenX, screenY, screenWidth, screenHeight);
-      context.restore();
-    };
-
-
-    const drawSelectPreview = () => {
-      if (!brushSelectData) return;
-      let pasteX = toTrueX(cursorX) - selectDataWidth / 2;
-      let pasteY = toTrueY(cursorY) - selectDataHeight / 2;
-      if (snapMode) {
-        const snapped = snapCoordinates(toScreenX(pasteX), toScreenY(pasteY));
-        pasteX = toTrueX(snapped.x);
-        pasteY = toTrueY(snapped.y);
-      }
-      brushSelectData.forEach(item => {
-        if (item.type === "line") {
-          const x0 = pasteX + item.x0,
-            y0 = pasteY + item.y0,
-            x1 = pasteX + item.x1,
-            y1 = pasteY + item.y1;
-          drawLine(toScreenX(x0), toScreenY(y0), toScreenX(x1), toScreenY(y1), item.color, item.size);
-        }
-      });
-    };
-
-
-    const drawCursorCircle = () => {
-      redrawCanvas();
-      if (selectMode && brushSelectData) {
-        drawSelectPreview();
-      } else {
-        const dispSize = eraserMode ? brushSize * 4 : brushSize;
-        context.beginPath();
-        context.arc(cursorX, cursorY, dispSize / 2, 0, Math.PI * 2);
-        context.strokeStyle = eraserMode ? "red" : "white";
-        context.lineWidth = 1;
-        context.stroke();
-      }
-    };
-
-
-
-    let leftMouseDown = false;
-
-    const getTouchPos = (canvas, touchEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      return {
-        x: touchEvent.touches[0].clientX - rect.left,
-        y: touchEvent.touches[0].clientY - rect.top
-      };
-    };
-
-    canvas.addEventListener("mousedown", e => {
-      if (e.button !== 0) return;
-      handleStart(e.offsetX, e.offsetY);
-    });
-
-    canvas.addEventListener("touchstart", e => {
-      e.preventDefault();
-      const touchPos = getTouchPos(canvas, e);
-      handleStart(touchPos.x, touchPos.y);
-    });
-
-    const handleStart = (x, y) => {
-
-      if (selectMode && brushSelectData) {
-        let pasteX = toTrueX(x) - selectDataWidth / 2;
-        let pasteY = toTrueY(y) - selectDataHeight / 2;
-        if (snapMode) {
-          ({ x: pasteX, y: pasteY } = snapCoordinates(pasteX, pasteY));
-        }
-        brushSelectData.forEach(item => {
-          if (item.type === "line") {
-            drawings.push({
-              type: "line",
-              x0: item.x0 + pasteX,
-              y0: item.y0 + pasteY,
-              x1: item.x1 + pasteX,
-              y1: item.y1 + pasteY,
-              color: item.color,
-              size: item.size
-            });
-          }
-        });
-        window.whiteboardData[channel] = drawings;
-        redrawCanvas();
-        return;
-      }
-
-      leftMouseDown = true;
-      if (snapMode) ({ x, y } = snapCoordinates(x, y));
-      cursorX = prevCursorX = x;
-      cursorY = prevCursorY = y;
-
-
-      if (selectMode && !brushSelectData) {
-        const trueX = toTrueX(x), trueY = toTrueY(y);
-        selectArea = { x0: trueX, y0: trueY, x1: trueX, y1: trueY };
-      }
-    };
-
-    canvas.addEventListener("mousemove", e => {
-      handleMove(e.offsetX, e.offsetY);
-    });
-
-    canvas.addEventListener("touchmove", e => {
-      e.preventDefault();
-      const touchPos = getTouchPos(canvas, e);
-      handleMove(touchPos.x, touchPos.y);
-    });
-
-    const handleMove = (x, y) => {
-      if (snapMode) ({ x, y } = snapCoordinates(x, y));
-      cursorX = x;
-      cursorY = y;
-
-      if (leftMouseDown) {
-        if (panMode) {
-          offsetX += (cursorX - prevCursorX) / scale;
-          offsetY += (cursorY - prevCursorY) / scale;
-          redrawCanvas();
-          whiteboardPanZoomData[channel] = { offsetX, offsetY, scale };
-        } else if (selectMode && !brushSelectData && selectArea) {
-          selectArea.x1 = toTrueX(x);
-          selectArea.y1 = toTrueY(y);
-          redrawCanvas();
-        } else if (eraserMode) {
-
-
-
-          const distance = Math.hypot(cursorX - prevCursorX, cursorY - prevCursorY);
-          const samples = Math.max(Math.ceil(distance / (brushSize / 2)), 1);
-          for (let i = 0; i <= samples; i++) {
-            const t = i / samples;
-            const sampleX = toTrueX(prevCursorX + (cursorX - prevCursorX) * t);
-            const sampleY = toTrueY(prevCursorY + (cursorY - prevCursorY) * t);
-            for (let j = drawings.length - 1; j >= 0; j--) {
-              const d = drawings[j];
-              if (d.type === "line" &&
-                isNearLine(d.x0, d.y0, d.x1, d.y1, sampleX, sampleY, (brushSize / scale) * 2, d.size))
-                drawings.splice(j, 1);
-            }
-          }
-          window.whiteboardData[channel] = drawings;
-          redrawCanvas();
-        } else {
-
-          const sx = toTrueX(cursorX), sy = toTrueY(cursorY),
-            psx = toTrueX(prevCursorX), psy = toTrueY(prevCursorY);
-          drawings.push({
-            type: "line",
-            x0: psx, y0: psy,
-            x1: sx, y1: sy,
-            color: brushColor, size: brushSize
-          });
-          drawLine(prevCursorX, prevCursorY, cursorX, cursorY, brushColor, brushSize);
-        }
-      }
-      prevCursorX = cursorX;
-      prevCursorY = cursorY;
-      drawCursorCircle();
-    };
-
-    canvas.addEventListener("mouseup", () => {
-      leftMouseDown = false;
-      if (selectMode && !brushSelectData && selectArea) {
-        drawSelectArea();
-      }
-    });
-
-    canvas.addEventListener("touchend", e => {
-      e.preventDefault();
-      leftMouseDown = false;
-      if (selectMode && !brushSelectData && selectArea) {
-        drawSelectArea();
-      }
-    });
-
-
-
-
-    const isLineInsideRect = (line, left, top, right, bottom) =>
-    (line.x0 >= left && line.x0 <= right &&
-      line.y0 >= top && line.y0 <= bottom &&
-      line.x1 >= left && line.x1 <= right &&
-      line.y1 >= top && line.y1 <= bottom);
-
-
-    window.addEventListener("resize", redrawCanvas);
-    redrawCanvas();
-  };
-
-  const renderCodeChannel = (container, channel) => {
-    container.innerHTML = "";
-
-    container.style.display = "flex";
-    container.style.flexDirection = "column";
-
-    const headerContainer = el("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }
-    });
-
-    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginLeft: "auto" } });
-    const saveBtn = el("button", {}, "Save");
-    buttonContainer.appendChild(saveBtn);
-
-    buttonContainer.appendChild(
-      el("button", {
-        onclick: () => {
-          const funcCat = categories.find(c => c.name === "Functions");
-          if (!funcCat?.channels?.length) return;
-          const blob = new Blob(
-            [JSON.stringify(funcCat.channels, null, 2)],
-            { type: "application/json" }
-          );
-          el("a", {
-            href: URL.createObjectURL(blob),
-            download: "code_functions.json"
-          }).click();
-        }
-      }, "Export")
-    );
-    buttonContainer.appendChild(
-      el("button", {
-        onclick: () => {
-          const importInput = el("input", {
-            type: "file",
-            accept: "application/json",
-            style: { display: "none" }
-          });
-          importInput.addEventListener("change", async e => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const fileObj = await readFile(file);
-            try {
-              const imported = JSON.parse(fileObj.content);
-              if (Array.isArray(imported)) {
-                let funcCat = categories.find(c => c.name === "Functions");
-                if (!funcCat) { funcCat = { name: "Functions", channels: [] }; categories.push(funcCat); }
-                imported.forEach(imp => {
-                  const idx = funcCat.channels.findIndex(
-                    ch => ch.name.toLowerCase() === imp.name.toLowerCase()
-                  );
-                  idx !== -1 ? funcCat.channels[idx] = imp : funcCat.channels.push(imp);
-                });
-                renderSidebar();
-              }
-            } catch { }
-          });
-          importInput.click();
-        }
-      }, "Import")
-    );
-
-    headerContainer.appendChild(buttonContainer);
-    container.appendChild(headerContainer);
-
-    const ioContainer = el("div", {
-      class: "toolbar",
-      style: {
-        display: "flex",
-        alignItems: "center"
-      }
-    });
-    const functionNameInput = el("input", {
-      type: "text",
-      placeholder: "Function Name..",
-      style: { flex: "1", minWidth: "80px" }
-    });
-    ioContainer.appendChild(functionNameInput);
-    container.appendChild(ioContainer);
-
-    const wrapper = el("div", {
-      class: "code-runner-wrapper",
-      style: {
-        flex: "1",
-        position: "relative",
-        display: "grid",
-        gridTemplateRows: "1fr 100px",
-        overflow: "hidden"
-      }
-    });
-    container.appendChild(wrapper);
-
-    const runBtn = el("button", { class: "run-btn" }, "Run Code");
-    wrapper.appendChild(runBtn);
-
-    const codeArea = el("textarea", {
-      class: "code-runner-textarea"
-    });
-    wrapper.appendChild(codeArea);
-    if (window.codeData[channel.id])
-      codeArea.value = window.codeData[channel.id];
-    codeArea.addEventListener("input", () => window.codeData[channel.id] = codeArea.value);
-
-    const outputDiv = el("div", {
-      class: "code-runner-output"
-    });
-    wrapper.appendChild(outputDiv);
-
-    runBtn.addEventListener("click", () => {
-      const code = codeArea.value, logs = [];
-      const origLog = console.log;
-      console.log = (...args) => {
-        logs.push(args.join(" "));
-        origLog(...args);
-      };
-      try {
-        const result = eval(code);
-        outputDiv.textContent = logs.length ? logs.join("\n") : (result !== undefined ? result : "Code executed successfully.");
-      } catch (err) {
-        outputDiv.textContent = "Error: " + err;
-      }
-      console.log = origLog;
-    });
-
-    functionNameInput.addEventListener("input", () => {
-      const funcCat = categories.find(c => c.name === "Functions");
-      saveBtn.textContent = (funcCat &&
-        funcCat.channels.find(ch => ch.name.toLowerCase() === functionNameInput.value.trim().toLowerCase()))
-        ? "Update" : "Save";
-    });
-
-    saveBtn.addEventListener("click", () => {
-      const code = codeArea.value;
-      if (!code.trim()) return;
-      let funcCat = categories.find(c => c.name === "Functions");
-      if (!funcCat) {
-        funcCat = { name: "Functions", channels: [] };
-        categories.push(funcCat);
-      }
-      let name = functionNameInput.value.trim() || "Saved Function " + (funcCat.channels.length + 1);
-      const idx = funcCat.channels.findIndex(ch => ch.name.toLowerCase() === name.toLowerCase());
-      if (idx !== -1) funcCat.channels[idx].code = code;
-      else {
-        const id = "func_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-        funcCat.channels.push({ id, name, type: "function", code });
-      }
-      renderSidebar();
-      functionNameInput.value = "";
-      saveBtn.textContent = "Save";
-    });
-  };
-
-  const renderReminderChannel = (container, channel) => {
-    container.innerHTML = "";
-    const getContrastingTextColor = bg => {
-      const parse = c => {
-        c = c.trim().toLowerCase();
-        if (c.startsWith('#')) {
-          let hex = c.slice(1);
-          if ([3, 4].includes(hex.length)) hex = hex.split('').map(ch => ch + ch).join('');
-          return { r: parseInt(hex.substring(0, 2), 16), g: parseInt(hex.substring(2, 2), 16), b: parseInt(hex.substring(4, 2), 16) };
-        }
-        if (c.startsWith("rgb")) {
-          const parts = c.match(/(\d+)/g) || [];
-          return { r: +parts[0] || 0, g: +parts[1] || 0, b: +parts[2] || 0 };
-        }
-        return { r: 255, g: 255, b: 255 };
-      };
-      const { r, g, b } = parse(bg);
-      const lum = (r, g, b) => { const f = c => (c /= 255) <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
-      return lum(r, g, b) > 0.179 ? "#000000" : "#ffffff";
-    };
-    reminders[channel.id] = reminders[channel.id] || [];
-    const listDiv = el("div");
-    container.appendChild(listDiv);
-    const renderReminders = () => {
-      listDiv.innerHTML = "";
-      reminders[channel.id].forEach((rem, idx) => {
-        const remDiv = el("div", {
-          class: "reminder-container",
-          style: {
-            backgroundColor: rem.color,
-            color: getContrastingTextColor(rem.color),
-            borderRadius: "4px",
-            position: "relative",
-            padding: "8px 28px 8px 8px"
-          }
-        });
-        if (rem.date) remDiv.appendChild(el("div", {}, new Date(rem.date).toLocaleString()));
-        remDiv.appendChild(el("div", {}, rem.text));
-        remDiv.appendChild(el("button", {
-          class: "remove-btn",
-          style: {
-            position: "absolute",
-            top: "0",
-            right: "0",
-            padding: "2px 8px",
-            border: "none",
-            background: "transparent",
-            color: "inherit",
-            cursor: "pointer",
-            fontSize: "14px",
-            borderRadius: "0 4px 0 4px"
-          },
-          onclick: () => {
-            reminders[channel.id].splice(idx, 1);
-            renderReminders();
-          }
-        }, "×"));
-        listDiv.appendChild(remDiv);
-      });
-    };
-    renderReminders();
-    const form = el("form", {
-      onsubmit: e => {
-        e.preventDefault();
-        reminders[channel.id].push({ date: dateInput.value || null, text: textInput.value, color: colorInput.value });
-        dateInput.value = ""; textInput.value = ""; renderReminders();
-      }, style: { display: "flex", flexWrap: "wrap", alignItems: "center" }
-    });
-
-    const dateInput = el("input", { type: "datetime-local" });
-    const textInput = el("input", { type: "text", placeholder: "Reminder text", required: true });
-    const colorInput = el("input", { type: "color", value: "#007bff" });
-    form.append(dateInput, textInput, colorInput, el("button", { type: "submit" }, "Add Reminder"));
-    container.appendChild(form);
-  };
-
-  const renderCryptChannel = (container, channel) => {
-    container.innerHTML = "";
-
-    const formDiv = el("div", {
-      class: "crypt-container",
-      style: { display: "flex", flexDirection: "column" }
-    });
-
-    const textAreaRow = el("div", {
-      style: { display: "flex", justifyContent: "space-between", flexWrap: "wrap" }
-    });
-
-
-    let isFileMode = false;
-    let fileName = "";
-    let fileType = "";
-
-
-    const messageWrapper = el("div", { style: { flex: "1", marginRight: "5px" } });
-    const messageInput = el("textarea", {
-      placeholder: "Enter your message here",
-      rows: "10",
-      class: "code-runner-textarea"
-    });
-
-
-    const copyMessageBtn = el("button", {
-      onclick: () => {
-        navigator.clipboard.writeText(messageInput.value);
-      }
-    }, "Copy Message");
-
-
-    const attachFileBtn = el("button", {
-      onclick: () => {
-        fileInput.click();
-      }
-    }, "Attach File");
-
-
-    const clearFileBtn = el("button", {
-      onclick: () => {
-
-        isFileMode = false;
-        fileName = "";
-        fileType = "";
-        messageInput.disabled = false;
-        resultOutput.disabled = true;
-        messageInput.value = "";
-        resultOutput.value = "";
-        messageInput.placeholder = "Enter your message here";
-        resultOutput.placeholder = "The result will appear here";
-        clearFileBtn.style.display = "none";
-        attachFileBtn.style.display = "inline";
-        fileInfo.textContent = "";
-        copyMessageBtn.disabled = false;
-        copyResultBtn.disabled = false;
+    categories = [
+      {
+        name: 'General',
+        channels: [{ id: 'text1', name: 'General Chat', type: 'text' }]
       },
-      style: { display: "none" }
-    }, "Clear File");
-
-
-    const fileInfo = el("div", {
-      style: {
-        marginTop: "5px",
-        fontSize: "12px",
-        color: "#666"
+      {
+        name: 'Learning',
+        channels: [
+          { id: 'flashcard1', name: 'Flashcards', type: 'flashcard' },
+          { id: 'whiteboard1', name: 'Whiteboard', type: 'whiteboard' }
+        ]
+      },
+      {
+        name: 'Reminders',
+        channels: [{ id: 'reminder1', name: 'Reminders', type: 'reminder' }]
+      },
+      {
+        name: 'Utilities',
+        channels: [
+          { id: 'code1', name: 'Code Runner', type: 'code' },
+          { id: 'crypt1', name: 'Crypt', type: 'crypt' }
+        ]
+      },
+      {
+        name: 'Settings',
+        channels: [{ id: 'settings', name: 'Settings', type: 'settings' }]
       }
-    });
-
-
-    const fileInput = el("input", {
-      type: "file",
-      style: { display: "none" }
-    });
-
-
-    fileInput.addEventListener("click", () => {
-      fileInput.value = "";
-    });
-
-    fileInput.addEventListener("change", function () {
-      if (fileInput.files && fileInput.files[0]) {
-        const file = fileInput.files[0];
-        fileName = file.name;
-        fileType = file.type || "application/octet-stream";
-
-
-        isFileMode = true;
-        messageInput.disabled = true;
-        resultOutput.disabled = true;
-        copyMessageBtn.disabled = true;
-        copyResultBtn.disabled = true;
-        messageInput.placeholder = "File content loaded (binary data)";
-        resultOutput.placeholder = "Encrypted/Decrypted file content will appear here";
-
-
-        clearFileBtn.style.display = "inline";
-        attachFileBtn.style.display = "none";
-
-
-        fileInfo.textContent = `File: ${fileName} (${formatFileSize(file.size)})`;
-
-
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          const arrayBuffer = e.target.result;
-          const byteArray = new Uint8Array(arrayBuffer);
-
-          messageInput.value = "_BINARY_DATA_";
-          messageInput._binaryData = byteArray;
-        };
-        reader.readAsArrayBuffer(file);
-      }
-    });
-
-    messageWrapper.appendChild(messageInput);
-
-    const messageButtonContainer = el("div", {
-      style: { display: "flex", justifyContent: "space-between" }
-    });
-    messageButtonContainer.appendChild(attachFileBtn);
-    messageButtonContainer.appendChild(clearFileBtn);
-    messageButtonContainer.appendChild(copyMessageBtn);
-    messageWrapper.appendChild(messageButtonContainer);
-    messageWrapper.appendChild(fileInfo);
-    messageWrapper.appendChild(fileInput);
-    textAreaRow.appendChild(messageWrapper);
-
-
-    const resultWrapper = el("div", { style: { flex: "1", marginLeft: "5px" } });
-    const resultOutput = el("textarea", {
-      placeholder: "The result will appear here",
-      disabled: true,
-      rows: "10",
-      class: "code-runner-textarea"
-    });
-
-
-    const resultInfo = el("div", {
-      style: {
-        marginTop: "5px",
-        fontSize: "12px",
-        color: "#666"
-      }
-    });
-
-
-    const copyResultBtn = el("button", {
-      onclick: () => {
-        navigator.clipboard.writeText(resultOutput.value);
-      }
-    }, "Copy Result");
-
-
-    const downloadBtn = el("button", {
-      onclick: () => {
-        if (isFileMode && resultOutput._binaryData) {
-
-          let downloadName = fileName;
-          if (downloadName.includes('.')) {
-
-            const nameParts = downloadName.split('.');
-            const extension = nameParts.pop();
-            const baseName = nameParts.join('.');
-
-            if (downloadName.endsWith('.enc')) {
-
-              downloadName = baseName;
-            } else {
-
-              downloadName = `${downloadName}.enc`;
+    ],
+    chatMessages = {},
+    flashcards = {},
+    reminders = {}
+  ;(window.whiteboardData = window.whiteboardData || {}),
+    (window.codeData = window.codeData || {})
+  const readFile = e =>
+      new Promise(t => {
+        const n = new FileReader()
+        ;(n.onload = n =>
+          t({ name: e.name, type: e.type, content: n.target.result })),
+          e.type.startsWith('image/') || e.type.startsWith('audio/')
+            ? n.readAsDataURL(e)
+            : n.readAsText(e)
+      }),
+    renderSidebar = () => {
+      const e = document.querySelector('.topbar')
+      ;(e.innerHTML = ''),
+        categories.forEach(t => {
+          const n = el('div', {
+              style: { display: 'flex', alignItems: 'center', gap: '0.5rem' }
+            }),
+            a = el('div', { class: 'channel-list' })
+          t.channels.forEach(e => {
+            const t = el(
+              'div',
+              {
+                class: 'channel-item',
+                'data-channel-id': e.id,
+                'data-channel-type': e.type,
+                oncontextmenu: n => {
+                  if ((n.preventDefault(), 'function' === e.type)) {
+                    t.textContent
+                    t.classList.add('remove-btn'), (t.title = 'Click to remove')
+                    const n = a => {
+                        a.stopPropagation()
+                        const l = categories.find(e => 'Functions' === e.name)
+                        l &&
+                          ((l.channels = l.channels.filter(t => t.id !== e.id)),
+                          renderSidebar()),
+                          t.removeEventListener('click', n)
+                      },
+                      a = e => {
+                        e.target !== t &&
+                          (t.classList.remove('remove-btn'),
+                          (t.title = ''),
+                          t.removeEventListener('click', n),
+                          document.removeEventListener('click', a))
+                      }
+                    t.addEventListener('click', n),
+                      document.addEventListener('click', a)
+                  }
+                },
+                onclick: () => {
+                  if ('function' === e.type) {
+                    const t = categories
+                      .flatMap(e => e.channels)
+                      .find(e => 'code' === e.type)
+                    t && ((window.codeData[t.id] = e.code), selectChannel(t))
+                  } else selectChannel(e)
+                }
+              },
+              e.name
+            )
+            a.appendChild(t)
+          }),
+            n.appendChild(a),
+            e.appendChild(n)
+        }),
+        e.appendChild(
+          el(
+            'div',
+            {
+              class: 'version-text',
+              style: { marginLeft: 'auto', padding: '0 1rem' }
+            },
+            'v1.24'
+          )
+        )
+    }
+  let activeChannelId = null
+  const selectChannel = e => {
+      ;(activeChannelId = e.id),
+        document
+          .querySelectorAll('.channel-item')
+          .forEach(t =>
+            t.classList.toggle(
+              'active-channel',
+              t.getAttribute('data-channel-id') === e.id
+            )
+          ),
+        renderChannel(e)
+    },
+    renderChannel = e => {
+      const t = document.querySelector('.main-content')
+      ;(t.innerHTML = ''),
+        (
+          {
+            text: () => renderTextChannel(t, e),
+            flashcard: () => renderFlashcardChannel(t, e),
+            whiteboard: () => renderWhiteboardChannel(t, e),
+            code: () => renderCodeChannel(t, e),
+            reminder: () => renderReminderChannel(t, e),
+            crypt: () => renderCryptChannel(t, e),
+            settings: () => renderSettingsChannel(t, e)
+          }[e.type] || (() => {})
+        )()
+    },
+    renderTextChannel = (e, t) => {
+      const n = el('div', { class: 'chat-container', style: { height: '90%' } })
+      e.appendChild(n)
+      el('div', {
+        class: 'flashcard-toolbar',
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }
+      })
+      const a = el('div', { class: 'messages-area' })
+      n.appendChild(a)
+      const l = () => {
+          a.innerHTML = ''
+          const e = document.createDocumentFragment()
+          ;(chatMessages[t.id] || []).forEach((n, a) => {
+            const i = el('div', { class: 'message-container' })
+            i.appendChild(el('div', { class: 'message-date' }, n.date))
+            const s = el('div', { class: 'message-content' }),
+              r = el('span')
+            if (
+              (n.text.split(/(https?:\/\/\S+|www\.\S+)/gi).forEach((e, t) => {
+                if (e)
+                  if (t % 2) {
+                    let t = /^www\./i.test(e) ? 'http://' + e : e
+                    try {
+                      new URL(t),
+                        r.appendChild(
+                          el(
+                            'a',
+                            {
+                              href: t,
+                              target: '_blank',
+                              rel: 'noopener noreferrer'
+                            },
+                            e
+                          )
+                        )
+                    } catch {
+                      r.appendChild(document.createTextNode(e))
+                    }
+                  } else {
+                    e.split('\n')
+                      .map((e, t, n) => {
+                        const a = document.createTextNode(e)
+                        return t < n.length - 1 ? [a, el('br')] : a
+                      })
+                      .flat()
+                      .forEach(e => r.appendChild(e))
+                  }
+              }),
+              s.appendChild(r),
+              n.files?.length)
+            ) {
+              const e = el('div')
+              n.files.forEach(t => {
+                const n = el('div', { style: { position: 'relative' } })
+                if (t.type.startsWith('image/')) {
+                  const e = el('img', {
+                    src: t.content,
+                    style: { maxWidth: '200px', cursor: 'pointer' }
+                  })
+                  e.addEventListener('click', () => o(t.content)),
+                    n.appendChild(e)
+                } else
+                  t.type.startsWith('audio/')
+                    ? n.appendChild(
+                        el('audio', { src: t.content, controls: !0 })
+                      )
+                    : t.type.startsWith('text/') || !t.type
+                    ? n.appendChild(
+                        el(
+                          'pre',
+                          { style: { maxHeight: '150px', overflow: 'auto' } },
+                          t.content
+                        )
+                      )
+                    : (n.textContent = t.name)
+                n.appendChild(
+                  el(
+                    'button',
+                    {
+                      class: 'download-btn',
+                      onclick: () => {
+                        const e = el('a')
+                        if (
+                          t.type.startsWith('image/') ||
+                          t.type.startsWith('audio/')
+                        )
+                          e.href = t.content
+                        else {
+                          const n = new Blob([t.content], {
+                            type: t.type || 'text/plain'
+                          })
+                          e.href = URL.createObjectURL(n)
+                        }
+                        ;(e.download = t.name), e.click()
+                      }
+                    },
+                    'Download'
+                  )
+                ),
+                  e.appendChild(n)
+              }),
+                s.appendChild(e)
             }
-          } else {
-            downloadName = `${downloadName}.enc`;
+            i.appendChild(s)
+            const d = el('div', { class: 'message-toolbar' })
+            d.appendChild(
+              el(
+                'button',
+                {
+                  class: 'edit-btn',
+                  onclick: () => {
+                    const e = el('form'),
+                      t = n.text.split('\n').length,
+                      a = el('textarea', {
+                        class: 'message-edited',
+                        rows: t,
+                        value: n.text
+                      })
+                    e.appendChild(a)
+                    let s = n.files.slice()
+                    const r = el('div'),
+                      d = () => {
+                        ;(r.innerHTML = ''),
+                          s.forEach((e, t) => {
+                            const n = el('div', {
+                              style: { position: 'relative' }
+                            })
+                            if (e.type.startsWith('image/')) {
+                              const t = el('img', {
+                                src: e.content,
+                                style: { maxWidth: '200px', cursor: 'pointer' }
+                              })
+                              t.addEventListener('click', () => o(e.content)),
+                                n.appendChild(t)
+                            } else
+                              e.type.startsWith('audio/')
+                                ? n.appendChild(
+                                    el('audio', {
+                                      src: e.content,
+                                      controls: !0
+                                    })
+                                  )
+                                : e.type.startsWith('text/') || !e.type
+                                ? n.appendChild(
+                                    el(
+                                      'pre',
+                                      {
+                                        style: {
+                                          maxHeight: '150px',
+                                          overflow: 'auto'
+                                        }
+                                      },
+                                      e.content
+                                    )
+                                  )
+                                : (n.textContent = e.name)
+                            n.appendChild(
+                              el(
+                                'button',
+                                {
+                                  type: 'button',
+                                  class: 'remove-btn',
+                                  style: {
+                                    position: 'absolute',
+                                    top: '0px',
+                                    right: '0px'
+                                  },
+                                  onclick: () => {
+                                    s.splice(t, 1), d()
+                                  }
+                                },
+                                'Remove'
+                              )
+                            ),
+                              r.appendChild(n)
+                          })
+                      }
+                    d(), e.appendChild(r)
+                    const c = el('input', {
+                        type: 'file',
+                        multiple: !0,
+                        style: { display: 'none' }
+                      }),
+                      p = el(
+                        'button',
+                        {
+                          type: 'button',
+                          onclick: e => {
+                            e.preventDefault(), c.click()
+                          }
+                        },
+                        'Attach File'
+                      )
+                    e.appendChild(p),
+                      e.appendChild(c),
+                      c.addEventListener('change', async () => {
+                        for (const e of c.files) s.push(await readFile(e))
+                        d(), (c.value = '')
+                      })
+                    const h = el('button', { type: 'submit' }, 'Save'),
+                      u = el('button', { type: 'button', onclick: l }, 'Cancel')
+                    e.append(h, u)
+                    const y = i.querySelector('.message-content')
+                    ;(y.innerHTML = ''),
+                      y.appendChild(e),
+                      e.addEventListener('submit', e => {
+                        e.preventDefault(),
+                          (n.text = a.value),
+                          (n.files = s),
+                          l()
+                      })
+                  }
+                },
+                'Edit'
+              )
+            ),
+              d.appendChild(
+                el(
+                  'button',
+                  {
+                    class: 'remove-btn',
+                    onclick: () => {
+                      chatMessages[t.id].splice(a, 1), l()
+                    }
+                  },
+                  'Remove'
+                )
+              ),
+              i.appendChild(d),
+              e.appendChild(i)
+          }),
+            a.appendChild(e)
+        },
+        o = e => {
+          const t = el('div', { class: 'image-overlay' }),
+            n = el('img', { src: e })
+          t.appendChild(n),
+            t.addEventListener('click', e => {
+              e.target === t &&
+                (t.classList.remove('show'), setTimeout(() => t.remove(), 100))
+            }),
+            document.body.appendChild(t),
+            setTimeout(() => t.classList.add('show'), 0)
+        }
+      ;(chatMessages[t.id] = chatMessages[t.id] || []), l()
+      const i = el('div', {
+        style: { display: 'flex', flexWrap: 'wrap', marginLeft: 'auto' }
+      })
+      i.appendChild(
+        el(
+          'button',
+          {
+            type: 'button',
+            onclick: () => {
+              const e = chatMessages[t.id] || [],
+                n = new Blob([JSON.stringify(e, null, 2)], {
+                  type: 'application/json'
+                })
+              el('a', {
+                href: URL.createObjectURL(n),
+                download: 'chat.json'
+              }).click()
+            }
+          },
+          'Export'
+        )
+      )
+      const s = el('input', {
+        type: 'file',
+        accept: 'application/json',
+        style: { display: 'none' },
+        onchange: async e => {
+          const n = e.target.files[0]
+          if (!n) return
+          const a = await readFile(n)
+          try {
+            const e = JSON.parse(a.content)
+            Array.isArray(e) &&
+              ((chatMessages[t.id] = chatMessages[t.id] || []),
+              e.forEach(e => {
+                e.id || (e.id = Date.now() + Math.random())
+                const n = chatMessages[t.id].findIndex(t => t.id === e.id)
+                ;-1 !== n
+                  ? (chatMessages[t.id][n] = e)
+                  : chatMessages[t.id].push(e)
+              }),
+              l())
+          } catch (e) {}
+        }
+      })
+      s.addEventListener('click', () => {
+        s.value = ''
+      }),
+        i.appendChild(s),
+        i.appendChild(
+          el('button', { type: 'button', onclick: () => s.click() }, 'Import')
+        ),
+        n.insertBefore(i, a)
+      const r = el('div', { style: { display: 'flex', overflowX: 'auto' } })
+      n.appendChild(r)
+      const d = el('div', { class: 'toolbar' }),
+        c = el('textarea', {
+          rows: '1',
+          placeholder: 'Type a message...',
+          style: {
+            flex: '1',
+            minWidth: '100px',
+            maxWidth: 'calc(100% - 120px)'
+          },
+          onkeydown: e => {
+            'Enter' !== e.key ||
+              e.shiftKey ||
+              e.isComposing ||
+              (e.preventDefault(),
+              y.dispatchEvent(new Event('submit', { cancelable: !0 })))
           }
-
-          const blob = new Blob([resultOutput._binaryData], { type: fileType });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = downloadName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        } else {
-
-          const blob = new Blob([resultOutput.value], { type: "text/plain" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "result.txt";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+        })
+      d.appendChild(c)
+      const p = el('input', {
+        type: 'file',
+        multiple: !0,
+        style: { display: 'none' }
+      })
+      d.appendChild(
+        el(
+          'button',
+          { type: 'button', onclick: () => p.click() },
+          'Attach File'
+        )
+      ),
+        d.appendChild(p),
+        d.appendChild(el('button', { type: 'submit' }, 'Send')),
+        n.appendChild(d)
+      let h = []
+      const u = () => {
+        ;(r.innerHTML = ''),
+          h.forEach((e, t) => {
+            const n = el('div', { class: 'file-item' }, e.name)
+            n.appendChild(
+              el(
+                'button',
+                {
+                  class: 'remove-btn',
+                  onclick: () => {
+                    h.splice(t, 1), u()
+                  }
+                },
+                'Remove'
+              )
+            ),
+              r.appendChild(n)
+          })
+      }
+      p.addEventListener('change', async () => {
+        for (const e of p.files) h.push(await readFile(e))
+        u(), (p.value = '')
+      })
+      const y = el('form', {
+        onsubmit: e => {
+          e.preventDefault()
+          const n = c.value
+          ;(('string' == typeof n && '' !== n.trim()) || h.length) &&
+            (chatMessages[t.id].push({
+              id: Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+              date: new Date().toLocaleString(),
+              text: n,
+              files: h
+            }),
+            l(),
+            (c.value = ''),
+            (h = []),
+            u(),
+            (a.scrollTop = a.scrollHeight))
         }
-      }
-    }, "Download");
-
-    resultWrapper.appendChild(resultOutput);
-
-    const resultButtonContainer = el("div", {
-      style: { display: "flex", justifyContent: "space-between" }
-    });
-    resultButtonContainer.appendChild(downloadBtn);
-    resultButtonContainer.appendChild(copyResultBtn);
-    resultWrapper.appendChild(resultButtonContainer);
-    resultWrapper.appendChild(resultInfo);
-    textAreaRow.appendChild(resultWrapper);
-
-    formDiv.appendChild(textAreaRow);
-
-    const actionRow = el("div", {
-      style: { display: "flex", alignItems: "center", flexWrap: "wrap", marginTop: "10px" }
-    });
-
-    const sliderLabel = el("label", {}, "Password Length: ");
-    const slider = el("input", {
-      type: "range",
-      min: "6",
-      max: "200",
-      value: "12",
-      oninput: (e) => {
-        passwordLengthDisplay.textContent = e.target.value;
-      }
-    });
-    const passwordLengthDisplay = el("span", {}, slider.value);
-    sliderLabel.appendChild(slider);
-    sliderLabel.appendChild(passwordLengthDisplay);
-    actionRow.appendChild(sliderLabel);
-
-    const generateBtn = el("button", {
-      onclick: () => {
-        const length = parseInt(slider.value, 10);
-        keyInput.value = generateRandomPassword(length);
-      }
-    }, "Generate");
-
-    const encryptBtn = el("button", {
-      onclick: async () => {
-        if (!keyInput.value) {
-          alert("Please enter an encryption key.");
-          return;
-        }
-        try {
-          if (isFileMode && messageInput._binaryData) {
-
-            const inputBytes = messageInput._binaryData;
-            const [encryptedBytes, iv] = await encryptBytes(inputBytes, keyInput.value);
-
-
-            resultOutput._binaryData = concatUint8Arrays([iv, encryptedBytes]);
-            resultOutput.value = "_ENCRYPTED_BINARY_DATA_";
-            resultOutput.disabled = true;
-
-
-            resultInfo.textContent = `Encrypted: ${formatFileSize(resultOutput._binaryData.length)} (ready to download)`;
-          } else {
-
-            resultOutput.value = await encryptMessage(messageInput.value, keyInput.value);
-            resultInfo.textContent = "";
+      })
+      y.appendChild(r), y.appendChild(d), n.appendChild(y)
+    },
+    renderFlashcardChannel = (e, t) => {
+      e.innerHTML = ''
+      const n = el('div', {
+          class: 'flashcard-toolbar',
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }
-        } catch (e) {
-          alert("Encryption failed: " + e.message);
-          console.error(e);
+        }),
+        a = el('div', {
+          style: { display: 'flex', flexWrap: 'wrap', marginLeft: 'auto' }
+        })
+      a.appendChild(
+        el(
+          'button',
+          {
+            type: 'button',
+            onclick: () => {
+              const e = flashcards[t.id] || [],
+                n = new Blob([JSON.stringify(e, null, 2)], {
+                  type: 'application/json'
+                })
+              el('a', {
+                href: URL.createObjectURL(n),
+                download: 'flashcards.json'
+              }).click()
+            }
+          },
+          'Export'
+        )
+      )
+      const l = el('input', {
+        type: 'file',
+        accept: 'application/json',
+        style: { display: 'none' },
+        onchange: async e => {
+          const n = e.target.files[0]
+          if (!n) return
+          const a = await readFile(n)
+          try {
+            const e = JSON.parse(a.content)
+            Array.isArray(e) &&
+              ((flashcards[t.id] = flashcards[t.id] || []),
+              e.forEach(e => {
+                const n = flashcards[t.id].findIndex(
+                  t => t.question === e.question
+                )
+                ;-1 !== n ? (flashcards[t.id][n] = e) : flashcards[t.id].push(e)
+              }),
+              y())
+          } catch {}
         }
-      }
-    }, "Encrypt");
-
-    const decryptBtn = el("button", {
-      onclick: async () => {
-        if (!keyInput.value) {
-          alert("Please enter an encryption key.");
-          return;
-        }
-        try {
-          if (isFileMode && messageInput._binaryData) {
-
-            const inputBytes = messageInput._binaryData;
-
-
-            const iv = inputBytes.slice(0, 16);
-            const encryptedData = inputBytes.slice(16);
-
-            const decryptedBytes = await decryptBytes(encryptedData, keyInput.value, iv);
-
-
-            resultOutput._binaryData = decryptedBytes;
-            resultOutput.value = "_DECRYPTED_BINARY_DATA_";
-            resultOutput.disabled = true;
-
-
-            resultInfo.textContent = `Decrypted: ${formatFileSize(decryptedBytes.length)} (ready to download)`;
-          } else {
-
-            resultOutput.value = await decryptMessage(messageInput.value, keyInput.value);
-            resultInfo.textContent = "";
+      })
+      l.addEventListener('click', () => {
+        l.value = ''
+      }),
+        a.appendChild(l),
+        a.appendChild(
+          el('button', { type: 'button', onclick: () => l.click() }, 'Import')
+        ),
+        n.appendChild(a),
+        e.appendChild(n)
+      const o = el('div'),
+        i = el('div'),
+        s = el('form', {
+          class: 'flashcard-form',
+          onsubmit: e => {
+            e.preventDefault()
+            const n = r.value.trim()
+            if (!n) return
+            const a = Array.from(d.querySelectorAll('.answer-row'))
+              .map(e => {
+                const [t, n] = e.querySelectorAll('input')
+                return n.value.trim()
+                  ? { text: n.value, correct: t.checked }
+                  : null
+              })
+              .filter(e => e)
+            a.length &&
+              ((flashcards[t.id] = flashcards[t.id] || []),
+              flashcards[t.id].push({ question: n, answers: a }),
+              (r.value = ''),
+              (d.innerHTML = ''),
+              c(),
+              y())
           }
-        } catch (e) {
-          alert("Decryption failed. Make sure the input is valid and the encryption key is correct. " + e.message);
-          console.error(e);
+        }),
+        r = el('input', {
+          type: 'text',
+          placeholder: 'Enter question here',
+          required: !0,
+          style: { flex: '1' }
+        })
+      s.appendChild(r)
+      const d = el('div', { id: 'answers-container' })
+      s.appendChild(d)
+      const c = (e = '', t = !1) => {
+        const n = el('div', {
+          class: 'answer-row',
+          style: { display: 'flex', alignItems: 'center' }
+        })
+        n.appendChild(
+          el('input', {
+            type: 'checkbox',
+            title: 'Mark as correct answer',
+            checked: t
+          })
+        ),
+          n.appendChild(
+            el('input', {
+              type: 'text',
+              placeholder: 'Answer',
+              required: !0,
+              value: e,
+              style: { flex: '1' }
+            })
+          ),
+          n.appendChild(
+            el(
+              'button',
+              {
+                type: 'button',
+                class: 'remove-btn',
+                onclick: () => n.remove()
+              },
+              'Remove'
+            )
+          ),
+          d.appendChild(n)
+      }
+      c(),
+        s.appendChild(
+          el('button', { type: 'button', onclick: () => c() }, 'Add Answer')
+        ),
+        s.appendChild(el('button', { type: 'submit' }, 'Add Flashcard'))
+      const p = el('button', { type: 'button' }, 'Start Test')
+      s.appendChild(p), i.appendChild(s)
+      const h = el('div')
+      i.appendChild(h)
+      const u = el('div', { style: { display: 'none' } })
+      o.append(i, u), e.appendChild(o)
+      const y = () => {
+        ;(h.innerHTML = ''),
+          (flashcards[t.id] = flashcards[t.id] || []).forEach((e, n) => {
+            const a = el('div', { class: 'flashcard' }),
+              l = el('p', {}, 'Q: ' + e.question)
+            a.appendChild(l)
+            const o = el('div')
+            e.answers.forEach(e => {
+              const t = el('div', {
+                  style: { display: 'flex', alignItems: 'center' }
+                }),
+                n = el('input', {
+                  type: 'checkbox',
+                  checked: e.correct,
+                  disabled: !0
+                })
+              t.appendChild(n),
+                t.appendChild(document.createTextNode(e.text)),
+                o.appendChild(t)
+            }),
+              a.appendChild(o)
+            const i = el('div', { class: 'toolbar' }),
+              s = el(
+                'button',
+                {
+                  type: 'button',
+                  onclick: function () {
+                    if ('Edit' === this.textContent) {
+                      const t = el('input', {
+                        type: 'text',
+                        value: e.question,
+                        style: { width: '100%' }
+                      })
+                      a.replaceChild(t, l)
+                      const n = el('div')
+                      e.answers.forEach(e => {
+                        const t = el('div', {
+                          class: 'answer-row',
+                          style: { display: 'flex', alignItems: 'center' }
+                        })
+                        t.appendChild(
+                          el('input', { type: 'checkbox', checked: e.correct })
+                        ),
+                          t.appendChild(
+                            el('input', {
+                              type: 'text',
+                              value: e.text,
+                              style: { flex: '1' }
+                            })
+                          ),
+                          n.appendChild(t)
+                      }),
+                        a.replaceChild(n, o)
+                      const s = el(
+                        'button',
+                        {
+                          type: 'button',
+                          onclick: () => {
+                            const e = el('div', {
+                              class: 'answer-row',
+                              style: { display: 'flex', alignItems: 'center' }
+                            })
+                            e.appendChild(el('input', { type: 'checkbox' })),
+                              e.appendChild(
+                                el('input', {
+                                  type: 'text',
+                                  placeholder: 'New answer',
+                                  style: { flex: '1' }
+                                })
+                              ),
+                              n.appendChild(e)
+                          }
+                        },
+                        'Add Answer'
+                      )
+                      i.insertBefore(s, this.nextSibling),
+                        (this.textContent = 'Save')
+                    } else {
+                      const t = a.querySelector("input[type='text']")
+                      e.question = t.value
+                      const n = []
+                      a.querySelectorAll('.answer-row').forEach(e => {
+                        const [t, a] = e.querySelectorAll('input')
+                        a.value.trim() &&
+                          n.push({ text: a.value, correct: t.checked })
+                      }),
+                        (e.answers = n)
+                      const l = i.querySelector('button:nth-child(3)')
+                      l && 'Add Answer' === l.textContent && i.removeChild(l),
+                        y()
+                    }
+                  }
+                },
+                'Edit'
+              )
+            i.appendChild(s),
+              i.appendChild(
+                el(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'remove-btn',
+                    onclick: () => {
+                      flashcards[t.id].splice(n, 1), y()
+                    }
+                  },
+                  'Remove'
+                )
+              ),
+              a.appendChild(i),
+              h.appendChild(a)
+          }),
+          (p.disabled = !flashcards[t.id]?.length)
+      }
+      y(),
+        p.addEventListener('click', () => {
+          ;(i.style.display = 'none'), f(u, t), (u.style.display = 'block')
+        })
+      const f = (e, t) => {
+        e.innerHTML = ''
+        const n = [...(flashcards[t.id] || [])].sort(() => Math.random() - 0.5)
+        if (!n.length)
+          return void (e.textContent = 'No flashcards available for testing.')
+        const a = n.map(e => {
+            const t = e.answers.slice()
+            for (let e = t.length - 1; e > 0; e--) {
+              const n = Math.floor(Math.random() * (e + 1))
+              ;[t[e], t[n]] = [t[n], t[e]]
+            }
+            return { question: e.question, answers: t }
+          }),
+          l = el('form', {
+            onsubmit: e => {
+              e.preventDefault()
+              let t = 0
+              a.forEach((e, n) => {
+                const a = Array.from(
+                    l.querySelectorAll(`input[name="card${n}"]:checked`)
+                  ).map(e => +e.value),
+                  o = e.answers
+                    .map((e, t) => (e.correct ? t : null))
+                    .filter(e => null !== e)
+                a.sort().toString() === o.sort().toString() && t++,
+                  l.querySelectorAll(`input[name="card${n}"]`).forEach(e => {
+                    const t = +e.value
+                    o.includes(t)
+                      ? e.parentElement.classList.add('correct-highlight')
+                      : e.checked &&
+                        e.parentElement.classList.add('incorrect-highlight'),
+                      (e.disabled = !0)
+                  })
+              }),
+                (l.querySelector("button[type='submit']").disabled = !0),
+                l.appendChild(el('div', {}, `Your score: ${t} / ${a.length}`))
+            }
+          })
+        a.forEach((e, t) => {
+          const n = el('div')
+          n.appendChild(el('p', {}, 'Q: ' + e.question)),
+            e.answers.forEach((e, a) => {
+              const l = el('label', {
+                style: { display: 'flex', alignItems: 'center' }
+              })
+              l.appendChild(
+                el('input', { type: 'checkbox', name: `card${t}`, value: a })
+              ),
+                l.append(e.text),
+                n.appendChild(l)
+            }),
+            l.appendChild(n)
+        }),
+          l.appendChild(el('button', { type: 'submit' }, 'Submit Answers')),
+          l.appendChild(
+            el(
+              'button',
+              {
+                type: 'button',
+                onclick: () => {
+                  ;(e.style.display = 'none'), (i.style.display = 'block')
+                }
+              },
+              'Back'
+            )
+          ),
+          e.appendChild(l)
+      }
+    },
+    renderWhiteboardChannel = (e, t) => {
+      ;(e.innerHTML = ''),
+        Object.assign(e.style, { display: 'flex', flexDirection: 'column' })
+      const n = el('div', {
+          style: { display: 'flex', flexDirection: 'column' }
+        }),
+        a = 20,
+        l = '#3c3c81',
+        o = (e, t) => {
+          let n = (E * S) % a,
+            l = (D * S) % a
+          return (
+            n < 0 && (n += a),
+            l < 0 && (l += a),
+            {
+              x: n + Math.round((e - n) / a) * a,
+              y: l + Math.round((t - l) / a) * a
+            }
+          )
+        },
+        i = (e, t, n, a, l, o, i, s) => {
+          const r = n - e,
+            d = a - t,
+            c = r * r + d * d
+          let p,
+            h,
+            u = 0 !== c ? ((l - e) * r + (o - t) * d) / c : -1
+          u < 0
+            ? ((p = e), (h = t))
+            : u > 1
+            ? ((p = n), (h = a))
+            : ((p = e + u * r), (h = t + u * d))
+          const y = l - p,
+            f = o - h
+          return Math.sqrt(y * y + f * f) <= i + s / 2
+        },
+        s = e =>
+          el(
+            'button',
+            {
+              onclick: () => {
+                const n = w.width / 2,
+                  a = w.height / 2,
+                  l = e ? 2 * S : S / 4
+                ;(E += n * (1 / l - 1 / S)),
+                  (D += a * (1 / l - 1 / S)),
+                  (S = l),
+                  z(),
+                  (whiteboardPanZoomData[t] = {
+                    offsetX: E,
+                    offsetY: D,
+                    scale: S
+                  })
+              }
+            },
+            e ? 'Zoom In' : 'Zoom Out'
+          ),
+        r = el('div', { class: 'toolbar', style: { display: 'flex' } }),
+        d = el('input', {
+          type: 'color',
+          value: '#ffffff',
+          onchange: e => {
+            ;(T = e.target.value),
+              (j = !1),
+              (p.style.backgroundColor = ''),
+              (F = !1),
+              (h.style.backgroundColor = ''),
+              (q = !1),
+              (m.style.backgroundColor = '')
+          }
+        }),
+        c = el('input', {
+          type: 'range',
+          min: '1',
+          max: '20',
+          value: '1',
+          onchange: e => {
+            ;(R = +e.target.value), J()
+          }
+        }),
+        p = el(
+          'button',
+          {
+            onclick: () => {
+              ;(j = !j),
+                (F = !1),
+                (h.style.backgroundColor = ''),
+                (q = !1),
+                (m.style.backgroundColor = ''),
+                (p.style.backgroundColor = j ? '#ff0000' : '')
+            }
+          },
+          'Eraser'
+        ),
+        h = el(
+          'button',
+          {
+            onclick: () => {
+              ;(F = !F),
+                (j = !1),
+                (p.style.backgroundColor = ''),
+                (q = !1),
+                (m.style.backgroundColor = ''),
+                (h.style.backgroundColor = F ? 'var(--color-accent)' : ''),
+                z()
+            }
+          },
+          'Pan'
+        ),
+        u = s(!0),
+        y = s(!1),
+        f = el(
+          'button',
+          {
+            onclick: () => {
+              ;(W = !W),
+                (f.style.backgroundColor = W ? 'var(--color-accent)' : '')
+            }
+          },
+          'Snap'
+        ),
+        m = el(
+          'button',
+          {
+            onclick: () => {
+              ;(q = !q),
+                (j = !1),
+                (p.style.backgroundColor = ''),
+                (F = !1),
+                (h.style.backgroundColor = ''),
+                (m.style.backgroundColor = q ? 'var(--color-accent)' : ''),
+                q
+                  ? ((w.style.cursor = 'crosshair'),
+                    (b.disabled = !1),
+                    (v.disabled = !1))
+                  : ((w.style.cursor = 'none'),
+                    (b.disabled = !0),
+                    (v.disabled = !0),
+                    (N = null),
+                    (O = null),
+                    z())
+            }
+          },
+          'Select'
+        ),
+        g = (e = !1) => {
+          if (!O) return
+          const n = Math.min(O.x0, O.x1),
+            a = Math.max(O.x0, O.x1),
+            l = Math.min(O.y0, O.y1),
+            o = Math.max(O.y0, O.y1)
+          ;(U = a - n), (B = o - l)
+          const i = [],
+            s = []
+          for (let t = 0; t < k.length; t++) {
+            const r = k[t]
+            'line' === r.type &&
+              ee(r, n, l, a, o) &&
+              (i.push(r), e && s.push(t))
+          }
+          if (
+            ((N = i.map(e => ({
+              type: 'line',
+              x0: e.x0 - n,
+              y0: e.y0 - l,
+              x1: e.x1 - n,
+              y1: e.y1 - l,
+              color: e.color,
+              size: e.size
+            }))),
+            e && s.length > 0)
+          ) {
+            for (let e = s.length - 1; e >= 0; e--) k.splice(s[e], 1)
+            window.whiteboardData[t] = k
+          }
+          ;(O = null), (b.disabled = !0), (v.disabled = !0), z()
+        },
+        b = el('button', { onclick: () => g(!1), disabled: !0 }, 'Copy'),
+        v = el('button', { onclick: () => g(!0), disabled: !0 }, 'Cut')
+      r.append(d, c, p, h, u, y, f, m, b, v), n.appendChild(r), e.appendChild(n)
+      const C = el('div', {
+        style: { flex: '1', position: 'relative', overflow: 'hidden' }
+      })
+      e.appendChild(C)
+      const w = el('canvas')
+      ;(w.style.cursor = 'none'), C.appendChild(w)
+      const x = w.getContext('2d')
+      w.classList.add('whiteboard-context'),
+        (document.oncontextmenu = () => !1),
+        (window.whiteboardData[t] = window.whiteboardData[t] || [])
+      const k = window.whiteboardData[t]
+      ;(window.whiteboardPanZoomData = window.whiteboardPanZoomData || {}),
+        (whiteboardPanZoomData = window.whiteboardPanZoomData),
+        (whiteboardPanZoomData[t] = whiteboardPanZoomData[t] || {
+          offsetX: 0,
+          offsetY: 0,
+          scale: 1
+        })
+      let { offsetX: E, offsetY: D, scale: S } = whiteboardPanZoomData[t],
+        L = 0,
+        M = 0,
+        A = 0,
+        I = 0,
+        T = '#fff',
+        R = 1,
+        j = !1,
+        F = !1,
+        W = !1,
+        q = !1,
+        O = null,
+        N = null,
+        U = 0,
+        B = 0
+      const _ = e => (e + E) * S,
+        H = e => (e + D) * S,
+        P = e => e / S - E,
+        $ = e => e / S - D,
+        z = () => {
+          ;(w.width = C.clientWidth),
+            (w.height = C.clientHeight),
+            x.clearRect(0, 0, w.width, w.height),
+            (x.fillStyle = '#1a1a2e'),
+            x.fillRect(0, 0, w.width, w.height)
+          let e = (E * S) % a,
+            t = (D * S) % a
+          e < 0 && (e += a), t < 0 && (t += a), (x.fillStyle = l)
+          for (let n = e; n < w.width; n += a)
+            for (let e = t; e < w.height; e += a)
+              x.beginPath(), x.arc(n, e, 1, 0, 2 * Math.PI), x.fill()
+          k.forEach(e => {
+            'line' === e.type &&
+              Y(_(e.x0), H(e.y0), _(e.x1), H(e.y1), e.color, e.size)
+          }),
+            G(),
+            O && Z()
+        },
+        Y = (e, t, n, a, l, o) => {
+          x.beginPath(),
+            x.moveTo(e, t),
+            x.lineTo(n, a),
+            (x.strokeStyle = l),
+            (x.lineWidth = o),
+            (x.lineCap = 'round'),
+            x.stroke()
+        },
+        G = () => {
+          if (!F) return
+          const e = w.width / 2,
+            t = w.height / 2
+          x.save(),
+            (x.strokeStyle = l),
+            (x.lineWidth = 1),
+            x.beginPath(),
+            x.moveTo(0, t),
+            x.lineTo(w.width, t),
+            x.stroke(),
+            x.beginPath(),
+            x.moveTo(e, 0),
+            x.lineTo(e, w.height),
+            x.stroke(),
+            x.restore()
+        },
+        Z = () => {
+          if (!O) return
+          const e = Math.min(O.x0, O.x1),
+            t = Math.max(O.x0, O.x1),
+            n = Math.min(O.y0, O.y1),
+            a = Math.max(O.y0, O.y1),
+            l = _(e),
+            o = H(n),
+            i = _(t) - _(e),
+            s = H(a) - H(n)
+          x.save(),
+            (x.strokeStyle = '#3c3c81'),
+            (x.lineWidth = 2),
+            x.setLineDash([5, 5]),
+            x.strokeRect(l, o, i, s),
+            x.restore()
+        },
+        J = () => {
+          if ((z(), q && N))
+            (() => {
+              if (!N) return
+              let e = P(L) - U / 2,
+                t = $(M) - B / 2
+              if (W) {
+                const n = o(_(e), H(t))
+                ;(e = P(n.x)), (t = $(n.y))
+              }
+              N.forEach(n => {
+                if ('line' === n.type) {
+                  const a = e + n.x0,
+                    l = t + n.y0,
+                    o = e + n.x1,
+                    i = t + n.y1
+                  Y(_(a), H(l), _(o), H(i), n.color, n.size)
+                }
+              })
+            })()
+          else {
+            const e = j ? 4 * R : R
+            x.beginPath(),
+              x.arc(L, M, e / 2, 0, 2 * Math.PI),
+              (x.strokeStyle = j ? 'red' : 'white'),
+              (x.lineWidth = 1),
+              x.stroke()
+          }
+        }
+      let X = !1
+      const K = (e, t) => {
+        const n = e.getBoundingClientRect()
+        return {
+          x: t.touches[0].clientX - n.left,
+          y: t.touches[0].clientY - n.top
         }
       }
-    }, "Decrypt");
-
-    actionRow.appendChild(generateBtn);
-    actionRow.appendChild(encryptBtn);
-    actionRow.appendChild(decryptBtn);
-    formDiv.appendChild(actionRow);
-
-    const keyWrapper = el("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        marginTop: "10px"
+      w.addEventListener('mousedown', e => {
+        0 === e.button && Q(e.offsetX, e.offsetY)
+      }),
+        w.addEventListener('touchstart', e => {
+          e.preventDefault()
+          const t = K(w, e)
+          Q(t.x, t.y)
+        })
+      const Q = (e, n) => {
+        if (q && N) {
+          let a = P(e) - U / 2,
+            l = $(n) - B / 2
+          return (
+            W && ({ x: a, y: l } = o(a, l)),
+            N.forEach(e => {
+              'line' === e.type &&
+                k.push({
+                  type: 'line',
+                  x0: e.x0 + a,
+                  y0: e.y0 + l,
+                  x1: e.x1 + a,
+                  y1: e.y1 + l,
+                  color: e.color,
+                  size: e.size
+                })
+            }),
+            (window.whiteboardData[t] = k),
+            void z()
+          )
+        }
+        if (
+          ((X = !0),
+          W && ({ x: e, y: n } = o(e, n)),
+          (L = A = e),
+          (M = I = n),
+          q && !N)
+        ) {
+          const t = P(e),
+            a = $(n)
+          O = { x0: t, y0: a, x1: t, y1: a }
+        }
       }
-    });
-    const keyInput = el("input", {
-      type: "text",
-      placeholder: "Enter encryption key",
-      class: "code-runner-textarea",
-      style: { flex: "1" }
-    });
-    const copyKeyBtn = el("button", {
-      onclick: () => {
-        navigator.clipboard.writeText(keyInput.value);
+      w.addEventListener('mousemove', e => {
+        V(e.offsetX, e.offsetY)
+      }),
+        w.addEventListener('touchmove', e => {
+          e.preventDefault()
+          const t = K(w, e)
+          V(t.x, t.y)
+        })
+      const V = (e, n) => {
+        if ((W && ({ x: e, y: n } = o(e, n)), (L = e), (M = n), X))
+          if (F)
+            (E += (L - A) / S),
+              (D += (M - I) / S),
+              z(),
+              (whiteboardPanZoomData[t] = { offsetX: E, offsetY: D, scale: S })
+          else if (q && !N && O) (O.x1 = P(e)), (O.y1 = $(n)), z()
+          else if (j) {
+            const e = Math.hypot(L - A, M - I),
+              n = Math.max(Math.ceil(e / (R / 2)), 1)
+            for (let e = 0; e <= n; e++) {
+              const t = e / n,
+                a = P(A + (L - A) * t),
+                l = $(I + (M - I) * t)
+              for (let e = k.length - 1; e >= 0; e--) {
+                const t = k[e]
+                'line' === t.type &&
+                  i(t.x0, t.y0, t.x1, t.y1, a, l, (R / S) * 2, t.size) &&
+                  k.splice(e, 1)
+              }
+            }
+            ;(window.whiteboardData[t] = k), z()
+          } else {
+            const e = P(L),
+              t = $(M),
+              n = P(A),
+              a = $(I)
+            k.push({
+              type: 'line',
+              x0: n,
+              y0: a,
+              x1: e,
+              y1: t,
+              color: T,
+              size: R
+            }),
+              Y(A, I, L, M, T, R)
+          }
+        ;(A = L), (I = M), J()
       }
-    }, "Copy Key");
-    keyWrapper.appendChild(keyInput);
-    keyWrapper.appendChild(copyKeyBtn);
-    formDiv.appendChild(keyWrapper);
-
-    container.appendChild(formDiv);
-
-
-    function formatFileSize(bytes) {
-      if (bytes < 1024) return bytes + " bytes";
-      else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + " KB";
-      else return (bytes / 1048576).toFixed(2) + " MB";
-    }
-
-
-    function uint8ArrayToHex(uint8array) {
-      return Array.from(uint8array)
-        .map(b => ("0" + b.toString(16)).slice(-2))
-        .join("");
-    }
-
-    function hexToUint8Array(hex) {
-      let length = hex.length / 2;
-      let result = new Uint8Array(length);
-      for (let i = 0; i < length; i++) {
-        result[i] = parseInt(hex.substring(i * 2, 2), 16);
+      w.addEventListener('mouseup', () => {
+        ;(X = !1), q && !N && O && Z()
+      }),
+        w.addEventListener('touchend', e => {
+          e.preventDefault(), (X = !1), q && !N && O && Z()
+        })
+      const ee = (e, t, n, a, l) =>
+        e.x0 >= t &&
+        e.x0 <= a &&
+        e.y0 >= n &&
+        e.y0 <= l &&
+        e.x1 >= t &&
+        e.x1 <= a &&
+        e.y1 >= n &&
+        e.y1 <= l
+      window.addEventListener('resize', z), z()
+    },
+    renderCodeChannel = (container, channel) => {
+      ;(container.innerHTML = ''),
+        (container.style.display = 'flex'),
+        (container.style.flexDirection = 'column')
+      const headerContainer = el('div', {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }
+        }),
+        buttonContainer = el('div', {
+          style: { display: 'flex', flexWrap: 'wrap', marginLeft: 'auto' }
+        }),
+        saveBtn = el('button', {}, 'Save')
+      buttonContainer.appendChild(saveBtn),
+        buttonContainer.appendChild(
+          el(
+            'button',
+            {
+              onclick: () => {
+                const e = categories.find(e => 'Functions' === e.name)
+                if (!e?.channels?.length) return
+                const t = new Blob([JSON.stringify(e.channels, null, 2)], {
+                  type: 'application/json'
+                })
+                el('a', {
+                  href: URL.createObjectURL(t),
+                  download: 'code_functions.json'
+                }).click()
+              }
+            },
+            'Export'
+          )
+        ),
+        buttonContainer.appendChild(
+          el(
+            'button',
+            {
+              onclick: () => {
+                const e = el('input', {
+                  type: 'file',
+                  accept: 'application/json',
+                  style: { display: 'none' }
+                })
+                e.addEventListener('change', async e => {
+                  const t = e.target.files[0]
+                  if (!t) return
+                  const n = await readFile(t)
+                  try {
+                    const e = JSON.parse(n.content)
+                    if (Array.isArray(e)) {
+                      let t = categories.find(e => 'Functions' === e.name)
+                      t ||
+                        ((t = { name: 'Functions', channels: [] }),
+                        categories.push(t)),
+                        e.forEach(e => {
+                          const n = t.channels.findIndex(
+                            t => t.name.toLowerCase() === e.name.toLowerCase()
+                          )
+                          ;-1 !== n ? (t.channels[n] = e) : t.channels.push(e)
+                        }),
+                        renderSidebar()
+                    }
+                  } catch {}
+                }),
+                  e.click()
+              }
+            },
+            'Import'
+          )
+        ),
+        headerContainer.appendChild(buttonContainer),
+        container.appendChild(headerContainer)
+      const ioContainer = el('div', {
+          class: 'toolbar',
+          style: { display: 'flex', alignItems: 'center' }
+        }),
+        functionNameInput = el('input', {
+          type: 'text',
+          placeholder: 'Function Name..',
+          style: { flex: '1', minWidth: '80px' }
+        })
+      ioContainer.appendChild(functionNameInput),
+        container.appendChild(ioContainer)
+      const wrapper = el('div', {
+        class: 'code-runner-wrapper',
+        style: {
+          flex: '1',
+          position: 'relative',
+          display: 'grid',
+          gridTemplateRows: '1fr 100px',
+          overflow: 'hidden'
+        }
+      })
+      container.appendChild(wrapper)
+      const runBtn = el('button', { class: 'run-btn' }, 'Run Code')
+      wrapper.appendChild(runBtn)
+      const codeArea = el('textarea', { class: 'code-runner-textarea' })
+      wrapper.appendChild(codeArea),
+        window.codeData[channel.id] &&
+          (codeArea.value = window.codeData[channel.id]),
+        codeArea.addEventListener(
+          'input',
+          () => (window.codeData[channel.id] = codeArea.value)
+        )
+      const outputDiv = el('div', { class: 'code-runner-output' })
+      wrapper.appendChild(outputDiv),
+        runBtn.addEventListener('click', () => {
+          const code = codeArea.value,
+            logs = [],
+            origLog = console.log
+          console.log = (...e) => {
+            logs.push(e.join(' ')), origLog(...e)
+          }
+          try {
+            const result = eval(code)
+            outputDiv.textContent = logs.length
+              ? logs.join('\n')
+              : void 0 !== result
+              ? result
+              : 'Code executed successfully.'
+          } catch (e) {
+            outputDiv.textContent = 'Error: ' + e
+          }
+          console.log = origLog
+        }),
+        functionNameInput.addEventListener('input', () => {
+          const e = categories.find(e => 'Functions' === e.name)
+          saveBtn.textContent =
+            e &&
+            e.channels.find(
+              e =>
+                e.name.toLowerCase() ===
+                functionNameInput.value.trim().toLowerCase()
+            )
+              ? 'Update'
+              : 'Save'
+        }),
+        saveBtn.addEventListener('click', () => {
+          const e = codeArea.value
+          if (!e.trim()) return
+          let t = categories.find(e => 'Functions' === e.name)
+          t || ((t = { name: 'Functions', channels: [] }), categories.push(t))
+          let n =
+            functionNameInput.value.trim() ||
+            'Saved Function ' + (t.channels.length + 1)
+          const a = t.channels.findIndex(
+            e => e.name.toLowerCase() === n.toLowerCase()
+          )
+          if (-1 !== a) t.channels[a].code = e
+          else {
+            const a =
+              'func_' +
+              Date.now() +
+              '_' +
+              Math.random().toString(36).substring(2, 9)
+            t.channels.push({ id: a, name: n, type: 'function', code: e })
+          }
+          renderSidebar(),
+            (functionNameInput.value = ''),
+            (saveBtn.textContent = 'Save')
+        })
+    },
+    renderReminderChannel = (e, t) => {
+      e.innerHTML = ''
+      const n = e => {
+        const {
+          r: t,
+          g: n,
+          b: a
+        } = (e => {
+          if ((e = e.trim().toLowerCase()).startsWith('#')) {
+            let t = e.slice(1)
+            return (
+              [3, 4].includes(t.length) &&
+                (t = t
+                  .split('')
+                  .map(e => e + e)
+                  .join('')),
+              {
+                r: parseInt(t.substring(0, 2), 16),
+                g: parseInt(t.substring(2, 2), 16),
+                b: parseInt(t.substring(4, 2), 16)
+              }
+            )
+          }
+          if (e.startsWith('rgb')) {
+            const t = e.match(/(\d+)/g) || []
+            return { r: +t[0] || 0, g: +t[1] || 0, b: +t[2] || 0 }
+          }
+          return { r: 255, g: 255, b: 255 }
+        })(e)
+        return ((e, t, n) => {
+          const a = e =>
+            (e /= 255) <= 0.03928
+              ? e / 12.92
+              : Math.pow((e + 0.055) / 1.055, 2.4)
+          return 0.2126 * a(e) + 0.7152 * a(t) + 0.0722 * a(n)
+        })(t, n, a) > 0.179
+          ? '#000000'
+          : '#ffffff'
       }
-      return result;
-    }
-
-    function concatUint8Arrays(arrays) {
-      let totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
-      let result = new Uint8Array(totalLength);
-      let offset = 0;
-      arrays.forEach(arr => {
-        result.set(arr, offset);
-        offset += arr.length;
-      });
-      return result;
-    }
-
-    async function getKeystream(keyBuffer, iv, length) {
-      const keystream = new Uint8Array(length);
-      let counter = 0;
-      let offset = 0;
-      while (offset < length) {
-        const counterBytes = new Uint8Array(4);
-        new DataView(counterBytes.buffer).setUint32(0, counter, false);
-        const combined = concatUint8Arrays([keyBuffer, iv, counterBytes]);
-        const hashBuffer = await crypto.subtle.digest("SHA-256", combined);
-        const hashArray = new Uint8Array(hashBuffer);
-        const bytesToCopy = Math.min(hashArray.length, length - offset);
-        keystream.set(hashArray.slice(0, bytesToCopy), offset);
-        offset += bytesToCopy;
-        counter++;
+      reminders[t.id] = reminders[t.id] || []
+      const a = el('div')
+      e.appendChild(a)
+      const l = () => {
+        ;(a.innerHTML = ''),
+          reminders[t.id].forEach((e, o) => {
+            const i = el('div', {
+              class: 'reminder-container',
+              style: {
+                backgroundColor: e.color,
+                color: n(e.color),
+                borderRadius: '4px',
+                position: 'relative',
+                padding: '8px 28px 8px 8px'
+              }
+            })
+            e.date &&
+              i.appendChild(el('div', {}, new Date(e.date).toLocaleString())),
+              i.appendChild(el('div', {}, e.text)),
+              i.appendChild(
+                el(
+                  'button',
+                  {
+                    class: 'remove-btn',
+                    style: {
+                      position: 'absolute',
+                      top: '0',
+                      right: '0',
+                      padding: '2px 8px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      borderRadius: '0 4px 0 4px'
+                    },
+                    onclick: () => {
+                      reminders[t.id].splice(o, 1), l()
+                    }
+                  },
+                  '×'
+                )
+              ),
+              a.appendChild(i)
+          })
       }
-      return keystream;
-    }
-
-
-    async function encryptMessage(message, key) {
-      const encoder = new TextEncoder();
-      const messageBuffer = encoder.encode(message);
-      const keyBuffer = encoder.encode(key);
-      const iv = new Uint8Array(16);
-      crypto.getRandomValues(iv);
-      const keystream = await getKeystream(keyBuffer, iv, messageBuffer.length);
-      const encryptedBuffer = new Uint8Array(messageBuffer.length);
-      for (let i = 0; i < messageBuffer.length; i++) {
-        encryptedBuffer[i] = messageBuffer[i] ^ keystream[i];
+      l()
+      const o = el('form', {
+          onsubmit: e => {
+            e.preventDefault(),
+              reminders[t.id].push({
+                date: i.value || null,
+                text: s.value,
+                color: r.value
+              }),
+              (i.value = ''),
+              (s.value = ''),
+              l()
+          },
+          style: { display: 'flex', flexWrap: 'wrap', alignItems: 'center' }
+        }),
+        i = el('input', { type: 'datetime-local' }),
+        s = el('input', {
+          type: 'text',
+          placeholder: 'Reminder text',
+          required: !0
+        }),
+        r = el('input', { type: 'color', value: '#007bff' })
+      o.append(i, s, r, el('button', { type: 'submit' }, 'Add Reminder')),
+        e.appendChild(o)
+    },
+    renderCryptChannel = (e, t) => {
+      e.innerHTML = ''
+      const n = el('div', {
+          class: 'crypt-container',
+          style: { display: 'flex', flexDirection: 'column' }
+        }),
+        a = el('div', {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap'
+          }
+        })
+      let l = !1,
+        o = '',
+        i = ''
+      const s = el('div', { style: { flex: '1', marginRight: '5px' } }),
+        r = el('textarea', {
+          placeholder: 'Enter your message here',
+          rows: '10',
+          class: 'code-runner-textarea'
+        }),
+        d = el(
+          'button',
+          {
+            onclick: () => {
+              navigator.clipboard.writeText(r.value)
+            }
+          },
+          'Copy Message'
+        ),
+        c = el(
+          'button',
+          {
+            onclick: () => {
+              u.click()
+            }
+          },
+          'Attach File'
+        ),
+        p = el(
+          'button',
+          {
+            onclick: () => {
+              ;(l = !1),
+                (o = ''),
+                (i = ''),
+                (r.disabled = !1),
+                (m.disabled = !0),
+                (r.value = ''),
+                (m.value = ''),
+                (r.placeholder = 'Enter your message here'),
+                (m.placeholder = 'The result will appear here'),
+                (p.style.display = 'none'),
+                (c.style.display = 'inline'),
+                (h.textContent = ''),
+                (d.disabled = !1),
+                (b.disabled = !1)
+            },
+            style: { display: 'none' }
+          },
+          'Clear File'
+        ),
+        h = el('div', {
+          style: { marginTop: '5px', fontSize: '12px', color: '#666' }
+        }),
+        u = el('input', { type: 'file', style: { display: 'none' } })
+      u.addEventListener('click', () => {
+        u.value = ''
+      }),
+        u.addEventListener('change', function () {
+          if (u.files && u.files[0]) {
+            const e = u.files[0]
+            ;(o = e.name),
+              (i = e.type || 'application/octet-stream'),
+              (l = !0),
+              (r.disabled = !0),
+              (m.disabled = !0),
+              (d.disabled = !0),
+              (b.disabled = !0),
+              (r.placeholder = 'File content loaded (binary data)'),
+              (m.placeholder =
+                'Encrypted/Decrypted file content will appear here'),
+              (p.style.display = 'inline'),
+              (c.style.display = 'none'),
+              (h.textContent = `File: ${o} (${T(e.size)})`)
+            const t = new FileReader()
+            ;(t.onload = function (e) {
+              const t = e.target.result,
+                n = new Uint8Array(t)
+              ;(r.value = '_BINARY_DATA_'), (r._binaryData = n)
+            }),
+              t.readAsArrayBuffer(e)
+          }
+        }),
+        s.appendChild(r)
+      const y = el('div', {
+        style: { display: 'flex', justifyContent: 'space-between' }
+      })
+      y.appendChild(c),
+        y.appendChild(p),
+        y.appendChild(d),
+        s.appendChild(y),
+        s.appendChild(h),
+        s.appendChild(u),
+        a.appendChild(s)
+      const f = el('div', { style: { flex: '1', marginLeft: '5px' } }),
+        m = el('textarea', {
+          placeholder: 'The result will appear here',
+          disabled: !0,
+          rows: '10',
+          class: 'code-runner-textarea'
+        }),
+        g = el('div', {
+          style: { marginTop: '5px', fontSize: '12px', color: '#666' }
+        }),
+        b = el(
+          'button',
+          {
+            onclick: () => {
+              navigator.clipboard.writeText(m.value)
+            }
+          },
+          'Copy Result'
+        ),
+        v = el(
+          'button',
+          {
+            onclick: () => {
+              if (l && m._binaryData) {
+                let e = o
+                if (e.includes('.')) {
+                  const t = e.split('.'),
+                    n = (t.pop(), t.join('.'))
+                  e = e.endsWith('.enc') ? n : `${e}.enc`
+                } else e = `${e}.enc`
+                const t = new Blob([m._binaryData], { type: i }),
+                  n = URL.createObjectURL(t),
+                  a = document.createElement('a')
+                ;(a.href = n),
+                  (a.download = e),
+                  document.body.appendChild(a),
+                  a.click(),
+                  document.body.removeChild(a),
+                  URL.revokeObjectURL(n)
+              } else {
+                const e = new Blob([m.value], { type: 'text/plain' }),
+                  t = URL.createObjectURL(e),
+                  n = document.createElement('a')
+                ;(n.href = t),
+                  (n.download = 'result.txt'),
+                  document.body.appendChild(n),
+                  n.click(),
+                  document.body.removeChild(n),
+                  URL.revokeObjectURL(t)
+              }
+            }
+          },
+          'Download'
+        )
+      f.appendChild(m)
+      const C = el('div', {
+        style: { display: 'flex', justifyContent: 'space-between' }
+      })
+      C.appendChild(v),
+        C.appendChild(b),
+        f.appendChild(C),
+        f.appendChild(g),
+        a.appendChild(f),
+        n.appendChild(a)
+      const w = el('div', {
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            marginTop: '10px'
+          }
+        }),
+        x = el('label', {}, 'Password Length: '),
+        k = el('input', {
+          type: 'range',
+          min: '6',
+          max: '200',
+          value: '12',
+          oninput: e => {
+            E.textContent = e.target.value
+          }
+        }),
+        E = el('span', {}, k.value)
+      x.appendChild(k), x.appendChild(E), w.appendChild(x)
+      const D = el(
+          'button',
+          {
+            onclick: () => {
+              const e = parseInt(k.value, 10)
+              A.value = W(e)
+            }
+          },
+          'Generate'
+        ),
+        S = el(
+          'button',
+          {
+            onclick: async () => {
+              if (A.value)
+                try {
+                  if (l && r._binaryData) {
+                    const e = r._binaryData,
+                      [t, n] = await (async function (e, t) {
+                        const n = crypto.getRandomValues(new Uint8Array(12)),
+                          a = new TextEncoder().encode(t),
+                          l = await crypto.subtle.digest('SHA-256', a),
+                          o = await crypto.subtle.importKey(
+                            'raw',
+                            l,
+                            { name: 'AES-GCM' },
+                            !1,
+                            ['encrypt']
+                          ),
+                          i = await crypto.subtle.encrypt(
+                            { name: 'AES-GCM', iv: n },
+                            o,
+                            e
+                          )
+                        return [new Uint8Array(i), n]
+                      })(e, A.value)
+                    ;(m._binaryData = F([n, t])),
+                      (m.value = '_ENCRYPTED_BINARY_DATA_'),
+                      (m.disabled = !0),
+                      (g.textContent = `Encrypted: ${T(
+                        m._binaryData.length
+                      )} (ready to download)`)
+                  } else
+                    (m.value = await (async function (e, t) {
+                      const n = crypto.getRandomValues(new Uint8Array(12)),
+                        a = new TextEncoder(),
+                        l = a.encode(t),
+                        o = await crypto.subtle.digest('SHA-256', l),
+                        i = await crypto.subtle.importKey(
+                          'raw',
+                          o,
+                          { name: 'AES-GCM' },
+                          !1,
+                          ['encrypt']
+                        ),
+                        s = a.encode(e),
+                        r = await crypto.subtle.encrypt(
+                          { name: 'AES-GCM', iv: n },
+                          i,
+                          s
+                        )
+                      return R(n) + ':' + R(new Uint8Array(r))
+                    })(r.value, A.value)),
+                      (g.textContent = '')
+                } catch (e) {
+                  alert('Encryption failed: ' + e.message)
+                }
+              else alert('Please enter an encryption key.')
+            }
+          },
+          'Encrypt'
+        ),
+        L = el(
+          'button',
+          {
+            onclick: async () => {
+              if (A.value)
+                try {
+                  if (l && r._binaryData) {
+                    const e = r._binaryData,
+                      t = e.slice(0, 12),
+                      n = e.slice(12),
+                      a = await (async function (e, t, n) {
+                        const a = new TextEncoder().encode(t),
+                          l = await crypto.subtle.digest('SHA-256', a),
+                          o = await crypto.subtle.importKey(
+                            'raw',
+                            l,
+                            { name: 'AES-GCM' },
+                            !1,
+                            ['decrypt']
+                          ),
+                          i = await crypto.subtle.decrypt(
+                            { name: 'AES-GCM', iv: n },
+                            o,
+                            e
+                          )
+                        return new Uint8Array(i)
+                      })(n, A.value, t)
+                    ;(m._binaryData = a),
+                      (m.value = '_DECRYPTED_BINARY_DATA_'),
+                      (m.disabled = !0),
+                      (g.textContent = `Decrypted: ${T(
+                        a.length
+                      )} (ready to download)`)
+                  } else
+                    (m.value = await (async function (e, t) {
+                      const [n, a] = e.split(':')
+                      if (!n || !a)
+                        throw new Error('Invalid encrypted message format')
+                      const l = j(n),
+                        o = j(a),
+                        i = new TextEncoder().encode(t),
+                        s = await crypto.subtle.digest('SHA-256', i),
+                        r = await crypto.subtle.importKey(
+                          'raw',
+                          s,
+                          { name: 'AES-GCM' },
+                          !1,
+                          ['decrypt']
+                        ),
+                        d = await crypto.subtle.decrypt(
+                          { name: 'AES-GCM', iv: l },
+                          r,
+                          o
+                        )
+                      return new TextDecoder().decode(d)
+                    })(r.value, A.value)),
+                      (g.textContent = '')
+                } catch (e) {
+                  alert(
+                    'Decryption failed. Make sure the input is valid and the encryption key is correct. ' +
+                      e.message
+                  )
+                }
+              else alert('Please enter an encryption key.')
+            }
+          },
+          'Decrypt'
+        )
+      w.appendChild(D), w.appendChild(S), w.appendChild(L), n.appendChild(w)
+      const M = el('div', {
+          style: { display: 'flex', alignItems: 'center', marginTop: '10px' }
+        }),
+        A = el('input', {
+          type: 'text',
+          placeholder: 'Enter encryption key',
+          class: 'code-runner-textarea',
+          style: { flex: '1' }
+        }),
+        I = el(
+          'button',
+          {
+            onclick: () => {
+              navigator.clipboard.writeText(A.value)
+            }
+          },
+          'Copy Key'
+        )
+      function T (e) {
+        return e < 1024
+          ? e + ' bytes'
+          : e < 1048576
+          ? (e / 1024).toFixed(2) + ' KB'
+          : (e / 1048576).toFixed(2) + ' MB'
       }
-      return uint8ArrayToHex(iv) + ":" + uint8ArrayToHex(encryptedBuffer);
-    }
-
-    async function decryptMessage(encrypted, key) {
-      const [ivHex, cipherHex] = encrypted.split(":");
-      if (!ivHex || !cipherHex) throw new Error("Invalid encrypted message format");
-      const iv = hexToUint8Array(ivHex);
-      const encryptedBuffer = hexToUint8Array(cipherHex);
-      const encoder = new TextEncoder();
-      const keyBuffer = encoder.encode(key);
-      const keystream = await getKeystream(keyBuffer, iv, encryptedBuffer.length);
-      const decryptedBuffer = new Uint8Array(encryptedBuffer.length);
-      for (let i = 0; i < encryptedBuffer.length; i++) {
-        decryptedBuffer[i] = encryptedBuffer[i] ^ keystream[i];
+      function R (e) {
+        return Array.from(e)
+          .map(e => ('0' + e.toString(16)).slice(-2))
+          .join('')
       }
-      const decoder = new TextDecoder();
-      return decoder.decode(decryptedBuffer);
-    }
-
-
-    async function encryptBytes(bytes, key) {
-      const encoder = new TextEncoder();
-      const keyBuffer = encoder.encode(key);
-      const iv = new Uint8Array(16);
-      crypto.getRandomValues(iv);
-      const keystream = await getKeystream(keyBuffer, iv, bytes.length);
-      const encryptedBuffer = new Uint8Array(bytes.length);
-
-      for (let i = 0; i < bytes.length; i++) {
-        encryptedBuffer[i] = bytes[i] ^ keystream[i];
+      function j (e) {
+        let t = e.length / 2,
+          n = new Uint8Array(t)
+        for (let a = 0; a < t; a++)
+          n[a] = parseInt(e.substring(2 * a, 2 * a + 2), 16)
+        return n
       }
-
-      return [encryptedBuffer, iv];
-    }
-
-    async function decryptBytes(encryptedBytes, key, iv) {
-      const encoder = new TextEncoder();
-      const keyBuffer = encoder.encode(key);
-      const keystream = await getKeystream(keyBuffer, iv, encryptedBytes.length);
-      const decryptedBuffer = new Uint8Array(encryptedBytes.length);
-
-      for (let i = 0; i < encryptedBytes.length; i++) {
-        decryptedBuffer[i] = encryptedBytes[i] ^ keystream[i];
+      function F (e) {
+        let t = e.reduce((e, t) => e + t.length, 0),
+          n = new Uint8Array(t),
+          a = 0
+        return (
+          e.forEach(e => {
+            n.set(e, a), (a += e.length)
+          }),
+          n
+        )
       }
-
-      return decryptedBuffer;
-    }
-
-    const generateRandomPassword = (length) => {
-      const chars =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫";
-      let result = "";
-      for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      M.appendChild(A), M.appendChild(I), n.appendChild(M), e.appendChild(n)
+      const W = e => {
+        const t =
+          'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ¡¢£¤¥¦§¨©«®¯°±²³´µ¶·¸¹º¼½¾¿€©®™×÷ƒ∑∆∂∞≈≠≡≤≥⊂⊃∈∉√π∞∩∪⊥∧∨∩≈⊕⊗∫'
+        let n = ''
+        for (let a = 0; a < e; a++)
+          n += t.charAt(Math.floor(Math.random() * t.length))
+        return n
       }
-      return result;
-    };
-  };
-
-  const renderSettingsChannel = (container, channel) => {
-    container.innerHTML = "";
-
-    const headerContainer = el("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
+    },
+    renderSettingsChannel = (e, t) => {
+      e.innerHTML = ''
+      const n = el('div', {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }
+        }),
+        a = el('div', {
+          style: {
+            display: 'flex',
+            flexWrap: 'wrap',
+            marginRight: 'auto',
+            alignItems: 'center'
+          }
+        })
+      e.appendChild(n), n.appendChild(a)
+      let l = null
+      const o = 'true' === localStorage.getItem('autoSaveEnabled')
+      let i = parseInt(localStorage.getItem('autoSaveInterval'), 10) || 3e4
+      const s = el('input', {
+          type: 'checkbox',
+          checked: o,
+          onchange: e => {
+            e.target.checked
+              ? (localStorage.setItem('autoSaveEnabled', 'true'), g(), b())
+              : (localStorage.setItem('autoSaveEnabled', 'false'), v())
+          }
+        }),
+        r = el(
+          'label',
+          {
+            style: { marginLeft: '1rem', display: 'flex', alignItems: 'center' }
+          },
+          'Auto Save: ',
+          s
+        ),
+        d = el('input', {
+          type: 'range',
+          min: '5000',
+          max: '120000',
+          step: '1000',
+          value: i,
+          oninput: e => {
+            ;(i = parseInt(e.target.value, 10)),
+              localStorage.setItem('autoSaveInterval', i),
+              (c.textContent = `Interval: ${i / 1e3}s`),
+              o && b()
+          }
+        }),
+        c = el('span', {}, `Interval: ${i / 1e3}s`),
+        p = el('div', { style: { marginLeft: '1rem' } }, d, c)
+      a.appendChild(r), a.appendChild(p)
+      const h = el(
+          'button',
+          {
+            onclick: () => {
+              const e = {
+                chatMessages: chatMessages,
+                flashcards: flashcards,
+                whiteboardData: window.whiteboardData,
+                codeData: window.codeData,
+                reminders: reminders,
+                categories: categories
+              }
+              localStorage.setItem('appData', JSON.stringify(e)),
+                alert('Data saved in localStorage.'),
+                m()
+            }
+          },
+          'Save data'
+        ),
+        u = el(
+          'button',
+          {
+            onclick: () => {
+              localStorage.removeItem('appData'),
+                localStorage.removeItem('autoSaveEnabled'),
+                localStorage.removeItem('autoSaveInterval'),
+                Object.keys(chatMessages).forEach(e => delete chatMessages[e]),
+                Object.keys(flashcards).forEach(e => delete flashcards[e]),
+                Object.keys(reminders).forEach(e => delete reminders[e]),
+                (window.whiteboardData = {}),
+                (window.codeData = {})
+              const e = categories.findIndex(e => 'Functions' === e.name)
+              ;-1 !== e && (categories.splice(e, 1), renderSidebar()),
+                alert('Memory erased.'),
+                m()
+            }
+          },
+          'Erase memory'
+        )
+      a.appendChild(h), a.appendChild(u)
+      const y = el('div', {
+          style: {
+            margin: 'var(--margin-small)',
+            color: 'var(--color-text-muted)'
+          }
+        }),
+        f = el('div')
+      function m () {
+        const e = {
+            chatMessages: chatMessages,
+            flashcards: flashcards,
+            whiteboardData: window.whiteboardData,
+            codeData: window.codeData,
+            reminders: reminders
+          },
+          t = JSON.stringify(e),
+          n = new Blob([t]).size
+        if (navigator.storage && navigator.storage.estimate)
+          navigator.storage.estimate().then(e => {
+            const t = e.quota,
+              a = (n / t) * 100
+            ;(f.style.width = a + '%'),
+              (y.textContent = `Memory used: ${(n / 1048576).toFixed(
+                2
+              )} MB (${a.toFixed(1)}% of quota)`)
+          })
+        else {
+          const e = 102400,
+            t = Math.min(100, (n / e) * 100)
+          ;(f.style.width = t + '%'),
+            (y.textContent = `Memory used: ${(n / 1048576).toFixed(
+              2
+            )} MB (${t.toFixed(1)}% of quota)`)
+        }
       }
-    });
-
-    const buttonContainer = el("div", { style: { display: "flex", flexWrap: "wrap", marginRight: "auto" } });
-
-    container.appendChild(headerContainer);
-    headerContainer.appendChild(buttonContainer);
-
-
-    const saveButton = el("button", {
-      onclick: () => {
-        const data = {
-          chatMessages,
-          flashcards,
+      function g () {
+        const e = {
+          chatMessages: chatMessages,
+          flashcards: flashcards,
           whiteboardData: window.whiteboardData,
           codeData: window.codeData,
-          reminders
-        };
-        localStorage.setItem('appData', JSON.stringify(data));
-        console.log("Data saved:", data);
-        alert("Data saved in localStorage.");
-        updateMemoryUsage();
+          reminders: reminders,
+          categories: categories
+        }
+        localStorage.setItem('appData', JSON.stringify(e))
       }
-    }, "Save data");
-
-
-
-    const eraseButton = el("button", {
-      onclick: () => {
-        localStorage.removeItem('appData');
-
-        Object.keys(chatMessages).forEach(key => delete chatMessages[key]);
-        Object.keys(flashcards).forEach(key => delete flashcards[key]);
-        Object.keys(reminders).forEach(key => delete reminders[key]);
-        window.whiteboardData = {};
-        window.codeData = {};
-        alert("Memory erased.");
-        updateMemoryUsage();
+      function b () {
+        v(), (l = setInterval(g, i))
       }
-    }, "Erase memory");
-
-    buttonContainer.appendChild(saveButton);
-    buttonContainer.appendChild(eraseButton);
-
-
-    const memoryBar = el("div", {
-      style: {
-        margin: "var(--margin-small)",
-        color: "var(--color-text-muted)"
+      function v () {
+        l && (clearInterval(l), (l = null))
       }
-    });
-    const memoryIndicator = el("div");
-    memoryBar.appendChild(memoryIndicator);
-    container.appendChild(memoryBar);
-
-
-    function updateMemoryUsage() {
-      const data = {
-        chatMessages,
-        flashcards,
-        whiteboardData: window.whiteboardData,
-        codeData: window.codeData,
-        reminders
-      };
-      const dataStr = JSON.stringify(data);
-      const size = new Blob([dataStr]).size;
-      const maxSize = 102400;
-      let percent = Math.min(100, (size / maxSize) * 100);
-      memoryIndicator.style.width = percent + "%";
-      memoryBar.textContent = "Memory used: " + size + " bytes (" + percent.toFixed(1) + "%)";
+      y.appendChild(f), e.appendChild(y), o && b(), m()
+    },
+    loadSavedData = () => {
+      const e = localStorage.getItem('appData')
+      if (e)
+        try {
+          const t = JSON.parse(e)
+          Object.assign(chatMessages, t.chatMessages || {}),
+            Object.assign(flashcards, t.flashcards || {}),
+            (window.whiteboardData = t.whiteboardData || {}),
+            (window.codeData = t.codeData || {}),
+            Object.assign(reminders, t.reminders || {}),
+            t.categories &&
+              categories.splice(0, categories.length, ...t.categories)
+        } catch (e) {}
     }
-
-    updateMemoryUsage();
-  };
-
-  const loadSavedData = () => {
-    const savedData = localStorage.getItem('appData');
-    if (savedData) {
-      try {
-        const data = JSON.parse(savedData);
-        Object.assign(chatMessages, data.chatMessages || {});
-        Object.assign(flashcards, data.flashcards || {});
-        window.whiteboardData = data.whiteboardData || {};
-        window.codeData = data.codeData || {};
-        Object.assign(reminders, data.reminders || {});
-        console.log("Saved data loaded:", data);
-      } catch (e) {
-        console.error("Error parsing saved data", e);
-      }
-    } else {
-      console.log("No saved data found in localStorage");
-    }
-  };
-
-  document.addEventListener("DOMContentLoaded", () => {
-    loadSavedData();
-    renderSidebar();
-    if (categories.length && categories[0].channels.length)
-      selectChannel(categories[0].channels[0]);
-  });
-})();
+  document.addEventListener('DOMContentLoaded', () => {
+    loadSavedData(),
+      renderSidebar(),
+      categories.length &&
+        categories[0].channels.length &&
+        selectChannel(categories[0].channels[0])
+  })
+})()
