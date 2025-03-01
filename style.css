@@ -1,14 +1,11 @@
 :root {
-    --color-primary: #1a1a2e;
-    --color-secondary: #2e2e5f;
-    --color-accent: #4343b3;
-    --color-background: #0d1117;
+    --color-background: #000000;
+    --color-primary: #202124;
+    --color-accent: #292a2d;
     --color-white: #ffffff;
     --color-text-light: #d1d5db;
     --color-text-dark: #f8f9fa;
-    --color-text-muted: #a1a1a1;
-    --color-border: #1f4068;
-    --color-border-light: #2f4f70;
+    --color-text-muted: #6e6e6e;
     --color-success-bg: #2b6c00;
     --color-error-bg: #500020;
     --color-black: #000000;
@@ -61,7 +58,7 @@ a {
 }
 
 .channel-item {
-    background: var(--color-secondary);
+    background: var(--color-primary);
     color: var(--color-white);
     border: none;
     padding: var(--padding-small);
@@ -96,7 +93,7 @@ button {
 }
 
 button {
-    background-color: var(--color-secondary);
+    background-color: var(--color-primary);
     color: var(--color-white);
     border: none;
     padding: var(--padding-small);
@@ -112,11 +109,11 @@ button:hover {
 }
 
 button:active {
-    background: var(--color-secondary);
+    background: var(--color-primary);
 }
 
 button:disabled {
-    background-color: var(--color-secondary);
+    background-color: var(--color-primary);
     color: var(--color-text-muted);
     cursor: not-allowed;
 }
@@ -441,8 +438,8 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:checked::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: 42%;
+    left: 51%;
     width: 5px;
     height: 10px;
     border: solid var(--color-white);
@@ -455,7 +452,7 @@ input[type="checkbox"]:hover {
 }
 
 input[type="checkbox"]:disabled {
-    background-color: var(--color-secondary);
+    background-color: var(--color-primary);
     border-color: var(--color-accent);
     cursor: not-allowed;
 }
@@ -475,6 +472,6 @@ input[type="checkbox"]:disabled::after {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--color-secondary);
+    background: var(--color-primary);
     border-radius: var(--border-radius-small);
 }

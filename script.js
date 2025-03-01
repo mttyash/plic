@@ -121,7 +121,7 @@
               class: 'version-text',
               style: { marginLeft: 'auto', padding: '0 1rem' }
             },
-            'v1.24'
+            'v1.25'
           )
         )
     }
@@ -869,8 +869,8 @@
       const n = el('div', {
           style: { display: 'flex', flexDirection: 'column' }
         }),
-        a = 20,
-        l = '#3c3c81',
+        a = 30,
+        l = '#6e6e6e',
         o = (e, t) => {
           let n = (E * S) % a,
             l = (D * S) % a
@@ -1084,7 +1084,7 @@
           ;(w.width = C.clientWidth),
             (w.height = C.clientHeight),
             x.clearRect(0, 0, w.width, w.height),
-            (x.fillStyle = '#1a1a2e'),
+            (x.fillStyle = '#202124'),
             x.fillRect(0, 0, w.width, w.height)
           let e = (E * S) % a,
             t = (D * S) % a
@@ -1136,7 +1136,7 @@
             i = _(t) - _(e),
             s = H(a) - H(n)
           x.save(),
-            (x.strokeStyle = '#3c3c81'),
+            (x.strokeStyle = '#292a2d'),
             (x.lineWidth = 2),
             x.setLineDash([5, 5]),
             x.strokeRect(l, o, i, s),
