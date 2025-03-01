@@ -121,7 +121,7 @@
               class: 'version-text',
               style: { marginLeft: 'auto', padding: '0 1rem' }
             },
-            'v1.25'
+            'v1.26'
           )
         )
     }
@@ -1136,7 +1136,7 @@
             i = _(t) - _(e),
             s = H(a) - H(n)
           x.save(),
-            (x.strokeStyle = '#292a2d'),
+            (x.strokeStyle = '#6e6e6e'),
             (x.lineWidth = 2),
             x.setLineDash([5, 5]),
             x.strokeRect(l, o, i, s),
